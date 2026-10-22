@@ -123,7 +123,7 @@ function communicationGroups() {
       .sort();
     // Prevent empty-signature hosts being merged into unrelated sets.
     if (!tokens.length) return;
-    const key=JSON.stringify([h.type||'server',safeValues(h,'service').sort(),tokens]);
+    const key=JSON.stringify([h.type||'server',safeValues(h,'service').sort(),safeValues(h,'site').sort(),tokens]);
     if(!signatures.has(key))signatures.set(key,[]);
     signatures.get(key).push(h.id);
   });

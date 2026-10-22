@@ -66,9 +66,13 @@ The filter first finds matching elements, then optionally includes their direct 
 The “Show all links between visible hosts” option changes which communications are drawn, not which elements qualify for display.
 
 
+## v5 — Site-aware automatic grouping
+
+Automatic grouping additionally requires an exact match on the hosts’ complete `site` attribute sets. Servers at different sites will never be consolidated, even when their communication signatures and services are identical. The original grouped sample workers all belong to Civic and still group as before. Port bundling and cluster membership behaviour are unchanged.
+
 ## v4 — Automatic communication grouping and port bundling
 
-In **Simplify diagram**, enable **Automatically group matching servers** to replace two or more eligible server nodes with a presentation-only group. Only `type: server` nodes are candidates; VIPs and logical services are never merged. For accuracy, the match is computed against the **complete loaded communications dataset**, not merely currently visible arrows: incoming/outgoing direction, exact remote node ID, TCP/UDP protocol, and destination port must all match. Candidate hosts must also have the same `service` attribute values. Servers with no communications are not auto-grouped. No hosts, memberships or communications are changed in JSON.
+In **Simplify diagram**, enable **Automatically group matching servers** to replace two or more eligible server nodes with a presentation-only group. Only `type: server` nodes are candidates; VIPs and logical services are never merged. For accuracy, the match is computed against the **complete loaded communications dataset**, not merely currently visible arrows: incoming/outgoing direction, exact remote node ID, TCP/UDP protocol, and destination port must all match. Candidate hosts must also have identical `service` **and `site`** attribute sets. A host assigned to multiple sites is grouped only with hosts having the exact same complete site set; missing site values match only other missing site values. Hosts at different sites are never merged into one automatic group. Servers with no communications are not auto-grouped. No hosts, memberships or communications are changed in JSON.
 
 A group only appears when at least two of its members are visible under the current filters. Select a group and press **Expand these servers** to see the individual hosts; **Collapse expanded groups** resets manual expansions. A collapsed grouping does not replace a VIP, and links to pool members remain logically distinct from communications to the VIP.
 
