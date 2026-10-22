@@ -1,0 +1,20 @@
+[
+  {
+    "id": "membership-app-1",
+    "source": "app-vip",
+    "target": "app01",
+    "type": "member"
+  },
+  {
+    "id": "membership-app-2",
+    "source": "app-vip",
+    "target": "app02",
+    "type": "member"
+  },
+  {
+    "id": "membership-app-3",
+    "source": "app-vip",
+    "target": "app03",
+    "type": "member"
+  }
+]
