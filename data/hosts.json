@@ -1,0 +1,14 @@
+[
+  {"id":"web01","name":"WEB-01","attributes":{"ip":["10.10.10.20","10.10.11.20"],"service":["Customer Portal"],"vlan":[110,111],"site":["Civic"],"environment":["Production"],"os":["RHEL 9"]}},
+  {"id":"web02","name":"WEB-02","attributes":{"ip":["10.10.10.21"],"service":["Customer Portal"],"vlan":[110],"site":["Kirk Ella"],"environment":["Production"]}},
+  {"id":"app01","name":"APP-01","attributes":{"ip":["10.10.20.30"],"service":["Customer Portal","Order API"],"vlan":[120],"site":["Civic"],"environment":["Production"]}},
+  {"id":"app02","name":"APP-02","attributes":{"ip":["10.10.20.31"],"service":["Order API"],"vlan":[120],"site":["Kirk Ella"],"environment":["Production"]}},
+  {"id":"db01","name":"DB-01","attributes":{"ip":["10.10.30.40"],"service":["Order API","Reporting"],"vlan":[130],"site":["Civic"],"environment":["Production"],"os":["RHEL 9"]}},
+  {"id":"dns01","name":"DNS-01","attributes":{"ip":["10.10.5.10"],"service":["Shared DNS"],"vlan":[100],"site":["Civic"],"environment":["Production"]}},
+  {"id":"dns02","name":"DNS-02","attributes":{"ip":["10.10.5.11"],"service":["Shared DNS"],"vlan":[100],"site":["Kirk Ella"],"environment":["Production"]}},
+  {"id":"backup01","name":"BACKUP-01","attributes":{"ip":["10.10.40.10"],"service":["Backup"],"vlan":[140],"site":["Civic"],"environment":["Production"]}},
+  {"id":"monitor01","name":"MONITOR-01","attributes":{"ip":["10.10.50.15"],"service":["Monitoring"],"vlan":[150],"site":["Civic"],"environment":["Production"]}},
+  {"id":"ntp01","name":"NTP-01","attributes":{"ip":["10.10.5.21"],"service":["Time Services"],"vlan":[100],"site":["Civic"],"environment":["Production"]}},
+  {"id":"report01","name":"REPORT-01","attributes":{"ip":["10.10.60.10"],"service":["Reporting"],"vlan":[160],"site":["Kirk Ella"],"environment":["Production"]}},
+  {"id":"test01","name":"TEST-01","attributes":{"ip":["10.20.10.40"],"service":["Lab"],"vlan":[210],"site":["Civic"],"environment":["Test"]}}
+]

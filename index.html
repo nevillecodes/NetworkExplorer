@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Network Explorer</title>
+  <link rel="stylesheet" href="style.css">
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.33.1/cytoscape.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="topbar"><div class="brand"><span class="logo">⌁</span><div><strong>Network Explorer</strong><small>Host communications and service dependencies</small></div></div><div class="topactions"><span id="status" role="status">Loading…</span><button id="fitBtn">Fit diagram</button><button id="layoutBtn">Rearrange</button></div></header>
+  <main class="shell">
+    <aside class="sidebar">
+      <section><h2>Explore</h2><label for="search">Find a host or IP</label><input id="search" placeholder="Search names, IPs, attributes…" autocomplete="off"><div class="searchhint">Search highlights matches within the current view.</div></section>
+      <section><h2>Filter hosts</h2><p class="help">Choose any attribute and value. Add more conditions to narrow results.</p><label for="attribute">Attribute</label><select id="attribute"></select><label for="value">Value</label><select id="value"></select><button id="addFilter" class="primary stretch">Add condition</button><div id="chips" class="chips"></div><button id="clearFilters" class="linkbutton">Clear conditions</button></section>
+      <section><h2>Relationships</h2><label class="toggle"><input id="neighbours" type="checkbox" checked> Include directly connected hosts</label><label class="toggle"><input id="showAllVisibleEdges" type="checkbox"> Show all links between visible hosts</label><label class="toggle"><input id="portLabels" type="checkbox" checked> Display port labels</label><label for="protocol">Protocol</label><select id="protocol"><option value="all">All protocols</option><option value="TCP">TCP only</option><option value="UDP">UDP only</option></select><label for="direction">Dependency direction</label><select id="direction"><option value="both">Both directions</option><option value="outgoing">Outgoing from matches</option><option value="incoming">Incoming to matches</option></select></section>
+      <section><h2>Data</h2><p class="help">Load JSON replacements without uploading anything to a server.</p><label class="fileLabel" for="importHosts">Import hosts.json</label><input type="file" id="importHosts" accept=".json,application/json" hidden><label class="fileLabel" for="importComms">Import communications.json</label><input type="file" id="importComms" accept=".json,application/json" hidden><div class="rowbuttons"><button id="exportHosts">Export hosts</button><button id="exportComms">Export links</button></div><button id="resetData" class="linkbutton">Restore sample data</button></section>
+    </aside>
+    <section class="centre"><div class="metrics"><span id="hostCount">— hosts</span><span id="linkCount">— communications</span><span id="matchCount">— matched</span><span class="metricnote">Drag hosts · scroll to zoom · click to inspect</span></div><div id="cy" aria-label="Interactive network dependency diagram"></div><div id="empty" hidden>No hosts match these filters. Remove a condition to see more.</div><div class="bottomnote">Arrow = connection initiator → destination. Ports are destination ports. Neighbours are one hop away.</div></section>
+    <aside class="details"><div class="detailsTitle"><h2>Host details</h2><button id="unselect" title="Clear selection" aria-label="Clear selection">×</button></div><div id="detailContent"><p class="help">Select a host or communication to inspect its attributes and connections.</p></div></aside>
+  </main>
+  <div id="toast" role="alert" aria-live="polite"></div>
+</body>
+</html>

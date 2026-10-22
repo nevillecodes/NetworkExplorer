@@ -1,0 +1,19 @@
+[
+  {"id":"c01","source":"web01","target":"app01","protocol":"TCP","port":443,"description":"Application API"},
+  {"id":"c02","source":"web01","target":"app01","protocol":"TCP","port":8443,"description":"Admin API"},
+  {"id":"c03","source":"web02","target":"app02","protocol":"TCP","port":443,"description":"Application API"},
+  {"id":"c04","source":"app01","target":"db01","protocol":"TCP","port":3306,"description":"Database"},
+  {"id":"c05","source":"app02","target":"db01","protocol":"TCP","port":3306,"description":"Database"},
+  {"id":"c06","source":"web01","target":"dns01","protocol":"UDP","port":53,"description":"DNS lookups"},
+  {"id":"c07","source":"web02","target":"dns02","protocol":"UDP","port":53,"description":"DNS lookups"},
+  {"id":"c08","source":"app01","target":"dns01","protocol":"UDP","port":53},
+  {"id":"c09","source":"app01","target":"ntp01","protocol":"UDP","port":123},
+  {"id":"c10","source":"db01","target":"ntp01","protocol":"UDP","port":123},
+  {"id":"c11","source":"backup01","target":"db01","protocol":"TCP","port":22,"description":"Backup agent"},
+  {"id":"c12","source":"monitor01","target":"web01","protocol":"UDP","port":161,"description":"SNMP polling"},
+  {"id":"c13","source":"monitor01","target":"app01","protocol":"UDP","port":161,"description":"SNMP polling"},
+  {"id":"c14","source":"monitor01","target":"db01","protocol":"UDP","port":161,"description":"SNMP polling"},
+  {"id":"c15","source":"report01","target":"db01","protocol":"TCP","port":3306,"description":"Reporting query"},
+  {"id":"c16","source":"app01","target":"web01","protocol":"UDP","port":514,"description":"Sample reverse flow"},
+  {"id":"c17","source":"test01","target":"dns01","protocol":"UDP","port":53}
+]
