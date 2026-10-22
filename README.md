@@ -12,45 +12,25 @@ python -m http.server 4321
 
 Or using PowerShell:
 ```$listener = New-Object System.Net.HttpListener
-
-$listener.Prefixes.Add(http://localhost:8080/)
-
+$listener.Prefixes.Add(http://localhost:4321/)
 $listener.Start()
-
-Write-Host "Server running at http://localhost:8080/"
-
- 
+Write-Host "Server running at http://localhost:4321/"
 
 while ($listener.IsListening) {
-
     $context = $listener.GetContext()
-
     $request = $context.Request
-
     $response = $context.Response
 
-   
-
     # Map the URL path to your local folder file
-
     $localPath = Join-Path (Get-Location) $request.Url.LocalPath.TrimStart('/')
-
     if (Test-Path $localPath -PathType Leaf) {
-
         $bytes = [System.IO.File]::ReadAllBytes($localPath)
-
         $response.ContentLength64 = $bytes.Length
-
         $response.OutputStream.Write($bytes, 0, $bytes.Length)
-
     } else {
-
         $response.StatusCode = 404
-
     }
-
     $response.Close()
-
 }
 ```
 
