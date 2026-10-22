@@ -13,7 +13,7 @@ python -m http.server 4321
 Or using PowerShell:
 ```
 $listener = New-Object System.Net.HttpListener
-$listener.Prefixes.Add(http://localhost:4321/)
+$listener.Prefixes.Add("http://localhost:4321/")
 $listener.Start()
 Write-Host "Server running at http://localhost:4321/"
 
