@@ -64,3 +64,18 @@ Click hosts or arrows to inspect them. Host search highlights names, IPs, IDs an
 The filter first finds matching elements, then optionally includes their direct communication partners. Cluster membership **does not** add elements to this set. For example, filtering `service = Time Services` shows NTP hosts and their direct communication partners but does not show `APP-VIP` merely because some of those partners belong to its cluster. Expanded mode draws dashed membership links only when both endpoints are otherwise visible. Collapsed mode hides those dashed links. Isolated mode remains a deliberate exception: clicking a VIP or its member in that mode focuses the entire cluster family and its one-hop communication partners.
 
 The “Show all links between visible hosts” option changes which communications are drawn, not which elements qualify for display.
+
+
+## v4 — Automatic communication grouping and port bundling
+
+In **Simplify diagram**, enable **Automatically group matching servers** to replace two or more eligible server nodes with a presentation-only group. Only `type: server` nodes are candidates; VIPs and logical services are never merged. For accuracy, the match is computed against the **complete loaded communications dataset**, not merely currently visible arrows: incoming/outgoing direction, exact remote node ID, TCP/UDP protocol, and destination port must all match. Candidate hosts must also have the same `service` attribute values. Servers with no communications are not auto-grouped. No hosts, memberships or communications are changed in JSON.
+
+A group only appears when at least two of its members are visible under the current filters. Select a group and press **Expand these servers** to see the individual hosts; **Collapse expanded groups** resets manual expansions. A collapsed grouping does not replace a VIP, and links to pool members remain logically distinct from communications to the VIP.
+
+Enable **Bundle ports between the same endpoints** to draw one arrow per displayed source/target pair instead of separate arrows. Click it to inspect the full original list, with direction, port and description. Bundles may contain several underlying same-port communications where multiple individually addressed hosts have been grouped. Disable bundling to view separate arrows, while still permitting group-level aggregation for identical members.
+
+**Note:** grouping is a visual simplification, not a proof that two servers have identical configuration or forwarding behaviour. Internal communications between members of the same collapsed group are not drawn as a self-loop; expand that group to see them. Group layouts can be rearranged using **Rearrange**. The graph is designed for approximately 100–1,000 hosts, but actual rendering performance depends on link density.
+
+### Try the new feature
+
+Filter `service = Batch Processing`. WORKER-01, WORKER-02 and WORKER-03 should be displayed as a single group, with links to DB-01 and NTP-01. Click the group and choose **Expand these servers** to see the individual nodes. With **Bundle ports** enabled, the DB connection is one bundled arrow; click it to inspect the two ports used by each worker.

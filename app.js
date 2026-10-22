@@ -3,6 +3,7 @@
 const $ = id => document.getElementById(id);
 let hosts = [], communications = [], relationships = [], cy, filters = [], selectedId = null, selectedEdgeId = null;
 let visibleIds = new Set(), matchedIds = new Set(), visibleComms = [];
+let displayGroups = new Map(), displayEdges = new Map(), expandedGroups = new Set();
 const stored = { positions: {} };
 const DEFAULTS = ['data/hosts.json', 'data/communications.json', 'data/relationships.json'];
 
@@ -45,7 +46,7 @@ async function loadDefaults() {
 }
 function setData(h, c, r, resetFilters = false) {
   validate(h, c, r);
-  hosts = h; communications = c; relationships = r;
+  hosts = h; communications = c; relationships = r; expandedGroups.clear();
   if (resetFilters) { filters = []; $('search').value = ''; }
   else filters = filters.filter(f => hosts.some(item => safeValues(item, f.key).includes(f.value)));
   rebuildSelectors(); renderChips(); buildGraph(); refresh();
@@ -84,20 +85,14 @@ function savedPosition(id) {
 }
 function buildGraph() {
   if (cy) { cy.destroy(); cy = null; }
-  // Include every item in the model; Cytoscape's hidden class controls visibility.
   cy = cytoscape({
-    container: $('cy'),
-    elements: [
-      ...hosts.map(h => ({group:'nodes',data:{id:h.id,label:h.name,color:colorFor(h),kind:h.type||'server'}})),
-      ...communications.map(c => ({group:'edges',data:{id:c.id,source:c.source,target:c.target,label:`${c.protocol} ${c.port}`,kind:'communication'}})),
-      ...relationships.map(r => ({group:'edges',data:{id:r.id,source:r.source,target:r.target,label:'member',kind:'relationship'}}))
-    ],
+    container: $('cy'), elements: [],
     style: [
       {selector:'node',style:{'background-color':'data(color)','label':'data(label)','color':'#203b5a','font-size':12,'font-weight':600,'text-valign':'center','text-halign':'center','text-wrap':'wrap','text-max-width':'108px','shape':'round-rectangle','width':136,'height':52,'border-width':1.5,'border-color':'#92adcd','overlay-opacity':0}},
       {selector:'node[kind = "load_balanced_service"]',style:{'shape':'round-diamond','width':164,'height':72,'border-color':'#548e79'}},
+      {selector:'node[kind = "auto_group"]',style:{'shape':'round-rectangle','width':174,'height':68,'background-color':'#d9e8f1','border-color':'#387da7','border-width':3,'font-size':13}},
       {selector:'edge',style:{'width':2,'curve-style':'bezier','control-point-step-size':55,'line-color':'#7e9bb8','target-arrow-shape':'triangle','target-arrow-color':'#527da4','arrow-scale':1.1,'label':'data(label)','font-size':10,'color':'#36536d','text-background-color':'#ffffff','text-background-opacity':.95,'text-background-padding':'3px','text-rotation':'none','text-border-color':'#d8e1eb','text-border-opacity':1,'text-border-width':.5,'text-margin-y':-8,'overlay-opacity':0}},
-      {selector:'edge[kind = "relationship"]',style:{'line-style':'dashed','line-color':'#98a4b2','target-arrow-shape':'none','label':'','width':1.6,'curve-style':'bezier'}},
-      {selector:'.hidden',style:{'display':'none'}},
+      {selector:'edge[kind = "relationship"]',style:{'line-style':'dashed','line-color':'#98a4b2','target-arrow-shape':'none','label':'','width':1.6}},
       {selector:'node:selected',style:{'border-width':4,'border-color':'#2874d0','background-color':'#c6dcfa'}},
       {selector:'edge:selected',style:{'width':4,'line-color':'#2364bc','target-arrow-color':'#2364bc'}},
       {selector:'.matched',style:{'border-color':'#3a8b70','border-width':3}},
@@ -106,15 +101,89 @@ function buildGraph() {
       {selector:'.highlightNode',style:{'opacity':1}},
       {selector:'.found',style:{'border-width':5,'border-color':'#e59e30'}}
     ],
-    minZoom:.12,maxZoom:3,wheelSensitivity:.22,
-    layout:{name:'grid',padding:80,cols:Math.max(2,Math.ceil(Math.sqrt(hosts.length)))}
+    minZoom:.12,maxZoom:3,wheelSensitivity:.22,layout:{name:'preset'}
   });
-  const saved = hosts.filter(h => savedPosition(h.id));
-  if(saved.length === hosts.length) cy.nodes().positions(n => savedPosition(n.id()));
-  cy.on('tap','node',e => { selectedId = e.target.id(); selectedEdgeId = null; if($('clusterMode').value==='isolated') refresh(); else inspect(); });
-  cy.on('tap','edge',e => { selectedEdgeId = e.target.id(); selectedId = null; inspect(); });
+  cy.on('tap','node',e => {
+    const id=e.target.id();
+    if(displayGroups.has(id)) {selectedId=id;selectedEdgeId=null;inspect();return;}
+    selectedId=id; selectedEdgeId=null;
+    if($('clusterMode').value==='isolated') refresh(); else inspect();
+  });
+  cy.on('tap','edge',e => {selectedEdgeId=e.target.id();selectedId=null;inspect();});
   cy.on('tap',e => {if(e.target===cy){selectedId=null;selectedEdgeId=null;inspect();}});
   cy.on('dragfree','node', savePositions);
+}
+// Structural equivalence is computed from the complete dataset, not the current filter.
+// A signature retains direction, protocol, port and the exact remote endpoint.
+function communicationGroups() {
+  const signatures = new Map();
+  hosts.filter(h => (h.type || 'server') === 'server').forEach(h => {
+    const tokens = communications.filter(c=>c.source===h.id || c.target===h.id)
+      .map(c=>`${c.source===h.id?'OUT':'IN'}|${c.protocol}|${c.port}|${c.source===h.id?c.target:c.source}`)
+      .sort();
+    // Prevent empty-signature hosts being merged into unrelated sets.
+    if (!tokens.length) return;
+    const key=JSON.stringify([h.type||'server',safeValues(h,'service').sort(),tokens]);
+    if(!signatures.has(key))signatures.set(key,[]);
+    signatures.get(key).push(h.id);
+  });
+  return [...signatures.values()].filter(ids=>ids.length>1).map(ids=>ids.sort());
+}
+function drawGraph(visibleRel) {
+  const candidates=$('autoGrouping').checked?communicationGroups():[];
+  displayGroups=new Map();displayEdges=new Map();
+  const representative=new Map([...visibleIds].map(id=>[id,id]));
+  candidates.forEach(ids=>{
+    const showing=ids.filter(id=>visibleIds.has(id));
+    if(showing.length<2)return;
+    const gid='auto:'+ids.join('|');
+    if(expandedGroups.has(gid))return;
+    displayGroups.set(gid, showing);
+    showing.forEach(id=>representative.set(id,gid));
+  });
+  const displayed=new Set([...representative.values()]);
+  const items=[...displayed].map(id=>{
+    if(displayGroups.has(id)){
+      const members=displayGroups.get(id);
+      return {group:'nodes',data:{id,label:`${members.length} matching servers\n${members.map(x=>hosts.find(h=>h.id===x)?.name).slice(0,2).join(', ')}${members.length>2?'…':''}`,kind:'auto_group',color:'#d9e8f1'}};
+    }
+    const h=hosts.find(h=>h.id===id);
+    return {group:'nodes',data:{id,label:h.name,kind:h.type||'server',color:colorFor(h)}};
+  });
+  const bundleMap=new Map();
+  visibleComms.forEach(c=>{
+    const from=representative.get(c.source),to=representative.get(c.target);
+    if(from===to)return; // internal edges are inspectable in expanded view
+    const key=$('bundlePorts').checked?JSON.stringify([from,to]):c.id;
+    if(!bundleMap.has(key))bundleMap.set(key,{source:from,target:to,comms:[]});
+    bundleMap.get(key).comms.push(c);
+  });
+  let index=0;
+  bundleMap.forEach(record=>{
+    const id='display-edge-'+index++;
+    const labels=[...new Set(record.comms.map(c=>`${c.protocol} ${c.port}`))];
+    const label=record.comms.length===1?labels[0]:labels.length===1?`${labels[0]} ×${record.comms.length}`:`${labels.length} ports · ${record.comms.length} links`;
+    displayEdges.set(id,record.comms);
+    items.push({group:'edges',data:{id,source:record.source,target:record.target,label,kind:'communication'}});
+  });
+  visibleRel.forEach(r=>{
+    const source=representative.get(r.source),target=representative.get(r.target);
+    if(source===target)return;
+    const id='relation:'+r.id;
+    displayEdges.set(id,[r]);
+    items.push({group:'edges',data:{id,source,target,label:'',kind:'relationship'}});
+  });
+  const prior=new Map();cy.nodes().forEach(n=>prior.set(n.id(),{...n.position()}));
+  cy.elements().remove();cy.add(items);
+  cy.nodes().forEach(n=>{
+    const p=prior.get(n.id())||savedPosition(n.id());
+    if(p)n.position(p);
+  });
+  cy.edges('[kind = "communication"]').style('label',$('portLabels').checked?'data(label)':'');
+  cy.nodes().forEach(n=>{
+    const members=displayGroups.get(n.id())||[n.id()];
+    if(filters.length && members.some(id=>matchedIds.has(id)))n.addClass('matched');
+  });
 }
 function savePositions() {
   // Stored only in this browser; export/import JSON remains the portable source of truth.
@@ -157,24 +226,15 @@ function refresh() {
   }
   const visibleRel = mode === 'collapsed' ? [] : relationships.filter(r =>
     visibleIds.has(r.source) && visibleIds.has(r.target) && (!isolating || r.source === selectedCluster));
-  const edgeSet = new Set([...visibleComms.map(c=>c.id),...visibleRel.map(r=>r.id)]);
-  cy.batch(() => {
-    cy.elements().removeClass('hidden matched found dimmed highlightEdge highlightNode');
-    cy.nodes().forEach(n => {
-      if(!visibleIds.has(n.id())) n.addClass('hidden');
-      else if(filters.length && matchedIds.has(n.id())) n.addClass('matched');
-    });
-    cy.edges().forEach(e=>{if(!edgeSet.has(e.id())) e.addClass('hidden');});
-    cy.edges('[kind = "communication"]').style('label', $('portLabels').checked ? 'data(label)' : '');
-  });
+  drawGraph(visibleRel);
   $('hostCount').textContent = `${visibleIds.size.toLocaleString()} elements shown`;
   $('linkCount').textContent = `${visibleComms.length.toLocaleString()} communications`;
   $('matchCount').textContent = `${visibleRel.length} memberships · ${matchedIds.size} matched`;
   $('empty').hidden = visibleIds.size > 0;
-  if (selectedId && !visibleIds.has(selectedId)) selectedId = null;
-  if (selectedEdgeId && !edgeSet.has(selectedEdgeId)) selectedEdgeId = null;
+  if (selectedId && !cy.getElementById(selectedId).length) selectedId = null;
+  if (selectedEdgeId && !cy.getElementById(selectedEdgeId).length) selectedEdgeId = null;
   findSearchMatches();inspect();
-  if(cy.nodes(':visible').length) cy.fit(cy.elements(':visible'),55);
+  if(cy.nodes().length) cy.fit(cy.elements(),55);
 }
 function findSearchMatches() {
   if(!cy) return;
@@ -183,16 +243,25 @@ function findSearchMatches() {
     cy.nodes().removeClass('found');
     if(q) hosts.forEach(h => {
       const text = [h.name,h.id,...Object.values(h.attributes||{}).flat()].join(' ').toLowerCase();
-      if(visibleIds.has(h.id) && text.includes(q)) cy.getElementById(h.id).addClass('found');
+      if(visibleIds.has(h.id) && text.includes(q)) {const nid=[...displayGroups].find(([,members])=>members.includes(h.id))?.[0]||h.id;cy.getElementById(nid).addClass('found');}
     });
   });
 }
 function el(tag, cls, text) {const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=String(text);return n;}
 function section(title,parent){const s=el('section','detailSection');s.append(el('h3','',title));parent.append(s);return s;}
-function hostLink(id){const h=hosts.find(x=>x.id===id);const b=el('button','',h?.name||id);b.onclick=()=>{selectedId=id;selectedEdgeId=null;inspect();const node=cy.getElementById(id);if(node.length)cy.center(node);};return b;}
+function hostLink(id){const h=hosts.find(x=>x.id===id);const b=el('button','',h?.name||id);b.onclick=()=>{const group=[...displayGroups].find(([,members])=>members.includes(id));if(group){expandedGroups.add(group[0]);selectedId=id;selectedEdgeId=null;refresh();}else{selectedId=id;selectedEdgeId=null;inspect();}const node=cy.getElementById(id);if(node.length)cy.center(node);};return b;}
 function inspect() {
   const panel=$('detailContent');panel.replaceChildren();
   cy.elements().removeClass('dimmed highlightEdge highlightNode'); cy.elements().unselect();
+  if(selectedId && displayGroups.has(selectedId)){
+    const members=displayGroups.get(selectedId);
+    panel.append(el('div','detailName',`Communication group (${members.length})`),el('p','help','These servers have identical full-dataset communication signatures. They are not a logical VIP or new infrastructure object.'));
+    const b=el('button','primary stretch','Expand these servers');
+    b.onclick=()=>{expandedGroups.add(selectedId);selectedId=null;refresh();};panel.append(b);
+    const sec=section('Group members',panel);
+    members.forEach(id=>{const host=hosts.find(h=>h.id===id);const div=el('div','comm');div.append(hostLink(id),el('small','',` · ${safeValues(host,'ip').join(', ')}`));sec.append(div);});
+    return;
+  }
   if(selectedId){
     const h=hosts.find(x=>x.id===selectedId); if(!h)return;
     cy.getElementById(h.id).select();
@@ -214,16 +283,22 @@ function inspect() {
     }
     const connected=new Set([h.id]);const related=new Set();
     visibleComms.forEach(c=>{if(c.source===h.id||c.target===h.id){connected.add(c.source);connected.add(c.target);related.add(c.id);}});
-    cy.batch(()=>{cy.elements(':visible').addClass('dimmed');connected.forEach(id=>cy.getElementById(id).removeClass('dimmed').addClass('highlightNode'));related.forEach(id=>cy.getElementById(id).removeClass('dimmed').addClass('highlightEdge'));});
+    cy.batch(()=>{cy.elements().addClass('dimmed');connected.forEach(id=>{const rep=[...displayGroups].find(([,members])=>members.includes(id))?.[0]||id;cy.getElementById(rep).removeClass('dimmed').addClass('highlightNode');});displayEdges.forEach((items,eid)=>{if(items.some(c=>related.has(c.id)))cy.getElementById(eid).removeClass('dimmed').addClass('highlightEdge');});});
   } else if(selectedEdgeId){
-    const c=communications.find(x=>x.id===selectedEdgeId) || relationships.find(x=>x.id===selectedEdgeId);if(!c)return;
-    if(c.type==='member'){panel.append(el('div','detailName','Cluster membership'));const ms=section('Relationship',panel);ms.append(hostLink(c.source),el('p','caption','Contains member'),hostLink(c.target));return;}
-    cy.getElementById(c.id).select();
-    panel.append(el('div','detailName',`${c.protocol} ${c.port}`),el('div','detailId',c.id));
-    const s=section('Communication',panel);
-    s.append(el('p','caption','Initiator'));s.append(hostLink(c.source));
-    s.append(el('p','caption','Destination'));s.append(hostLink(c.target));
-    if(c.description)s.append(el('p','',c.description));
+    const records=displayEdges.get(selectedEdgeId);if(!records)return;
+    cy.getElementById(selectedEdgeId).select();
+    if(records[0].type==='member'){
+      panel.append(el('div','detailName','Cluster membership'));
+      const ms=section('Relationship',panel);
+      records.forEach(r=>{ms.append(hostLink(r.source),el('p','caption','Contains member'),hostLink(r.target));});
+      return;
+    }
+    panel.append(el('div','detailName',records.length===1?`${records[0].protocol} ${records[0].port}`:`${records.length} individual communications`));
+    const s=section('Underlying connections',panel);
+    records.forEach(c=>{
+      const line=el('div','comm');
+      line.append(hostLink(c.source),el('span','caption',' → '),hostLink(c.target),el('small','',` · ${c.protocol} ${c.port}${c.description?' — '+c.description:''}`));s.append(line);
+    });
   } else panel.append(el('p','help','Select a host or communication to inspect its attributes and connections.'));
 }
 function download(name, content, type='application/json') {
@@ -238,8 +313,8 @@ async function importFile(file,kind){
 }
 function autoLayout(){
   if(!cy)return;
-  const shown=cy.nodes(':visible');if(!shown.length)return;
-  const visible = cy.elements(':visible');
+  const shown=cy.nodes();if(!shown.length)return;
+  const visible = cy.elements();
   if(shown.length<=180){
     visible.layout({name:'cose',animate:false,randomize:true,nodeRepulsion:()=>180000,idealEdgeLength:()=>160,edgeElasticity:()=>80,gravity:.3,numIter:350,padding:60,fit:true}).run();
   } else {
@@ -251,8 +326,9 @@ function wire(){
   $('attribute').addEventListener('change',rebuildValues);
   $('addFilter').onclick=()=>{const key=$('attribute').value,value=$('value').value;if(!key||value==null)return;if(!filters.some(f=>f.key===key&&f.value===value))filters.push({key,value});renderChips();refresh();};
   $('clearFilters').onclick=()=>{filters=[];renderChips();refresh();};
-  ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode'].forEach(id=>$(id).addEventListener('change',refresh));
+  ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts'].forEach(id=>$(id).addEventListener('change',refresh));
   $('search').addEventListener('input',findSearchMatches);
+  $('expandReset').onclick=()=>{expandedGroups.clear();selectedId=null;selectedEdgeId=null;refresh();};
   $('unselect').onclick=()=>{selectedId=null;selectedEdgeId=null;inspect();};
   $('fitBtn').onclick=()=>{if(cy.nodes(':visible').length)cy.fit(cy.elements(':visible'),55);};
   $('layoutBtn').onclick=autoLayout;
