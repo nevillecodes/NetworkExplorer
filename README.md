@@ -10,6 +10,50 @@ From this directory:
 python -m http.server 4321
 ```
 
+Or using PowerShell:
+```$listener = New-Object System.Net.HttpListener
+
+$listener.Prefixes.Add(http://localhost:8080/)
+
+$listener.Start()
+
+Write-Host "Server running at http://localhost:8080/"
+
+ 
+
+while ($listener.IsListening) {
+
+    $context = $listener.GetContext()
+
+    $request = $context.Request
+
+    $response = $context.Response
+
+   
+
+    # Map the URL path to your local folder file
+
+    $localPath = Join-Path (Get-Location) $request.Url.LocalPath.TrimStart('/')
+
+    if (Test-Path $localPath -PathType Leaf) {
+
+        $bytes = [System.IO.File]::ReadAllBytes($localPath)
+
+        $response.ContentLength64 = $bytes.Length
+
+        $response.OutputStream.Write($bytes, 0, $bytes.Length)
+
+    } else {
+
+        $response.StatusCode = 404
+
+    }
+
+    $response.Close()
+
+}
+```
+
 Then open http://localhost:4321 in your browser.
 
 No npm, Node.js, server-side code, database, account or build process is required. **An internet connection is currently needed to fetch Cytoscape.js from the CDN**, but your host and communications data stay in the local browser and are not uploaded.
