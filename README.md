@@ -104,3 +104,17 @@ Set `"bidirectional": "yes"` on any communication to draw arrowheads at **both**
 ```
 
 Bundled ports are separated by their directionality: records with `"yes"` are never combined visually with one-way records, even if their endpoints match. Clicking a bundled edge shows the exact individual records and indicates bidirectionality. Structural-equivalence grouping also distinguishes bidirectional from one-way connections. A bidirectional flag changes the **visual meaning of the connection**; it does not create a reverse communication record or expand dependency-filter traversal. For literal traffic flow analysis, the data should explicitly describe both directions or the filtering model should be extended. The sample `c01` record is marked bidirectional for testing.
+
+## v9 — Cloud nodes and multi-endpoint communications
+
+- Add a node to `hosts.json` with `"type": "cloud"` to represent an intentionally abstract collection of networks/hosts. It has a distinctive cloud-labelled, dashed-outline node and retains the usual arbitrary attributes and filtering. Cloud nodes are **not** treated as servers for automatic consolidation. A cloud is an abstraction, not a discovered network or an inferred set of relationships.
+- `communications.json` now accepts a single ID **or an array of IDs** in both `source` and `target`. For example:
+
+```json
+{ "id":"c-multi", "source":["web01","web02"], "target":["api01","api02"], "protocol":"TCP", "port":443 }
+```
+
+  This means **all combinations**: web01→api01, web01→api02, web02→api01, web02→api02 (four communication records internally). Use separate communication definitions if only some pairs communicate. Empty arrays, duplicate endpoint IDs, or unknown IDs are rejected. The internal IDs are derived from the original ID and endpoint indices.
+- All existing filtering, auto-grouping, bundling, detail inspection and optional `bidirectional` behaviour operate on those individual expanded records. Import/export retains the original compact arrays; exporting will not expand them.
+- The sample includes an External Services cloud and examples of source and target arrays.
+- **Important:** these entries model logical communication relationships; they do not mean that a cloud's unspecified internal hosts have been individually discovered.

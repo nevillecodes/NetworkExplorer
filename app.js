@@ -1,7 +1,7 @@
 'use strict';
 // Network Explorer: plain JavaScript, Cytoscape.js, and three JSON files.
 const $ = id => document.getElementById(id);
-let hosts = [], communications = [], relationships = [], relationshipDefinitions = [], cy, filters = [], selectedId = null, selectedEdgeId = null;
+let hosts = [], communications = [], communicationDefinitions = [], relationships = [], relationshipDefinitions = [], cy, filters = [], selectedId = null, selectedEdgeId = null;
 let visibleIds = new Set(), matchedIds = new Set(), visibleComms = [];
 let displayGroups = new Map(), displayEdges = new Map(), expandedGroups = new Set();
 const stored = { positions: {} };
@@ -22,6 +22,25 @@ function expandRelationships(definitions) {
     return targets.map(target => ({...r, id: targets.length === 1 ? r.id : `${r.id}::${target}`, target}));
   });
 }
+// Array-valued endpoints are convenient authoring syntax. Each combination remains
+// a distinct communication internally, with a deterministic, collision-safe ID.
+function endpointIds(value, field, recordId) {
+  const items = Array.isArray(value) ? value : [value];
+  if (!items.length || items.some(id => typeof id !== 'string' || !id.trim()) || new Set(items).size !== items.length)
+    throw Error(`Communication ${recordId} has invalid or duplicate ${field} IDs.`);
+  return items;
+}
+function expandCommunications(definitions) {
+  return definitions.flatMap(c => {
+    const sources = endpointIds(c.source, 'source', c.id);
+    const targets = endpointIds(c.target, 'target', c.id);
+    const multiple = sources.length * targets.length > 1;
+    return sources.flatMap((source, si) => targets.map((target, ti) => ({
+      ...c, id: multiple ? `${c.id}::${si}:${ti}` : c.id, source, target,
+      definitionId: c.id
+    })));
+  });
+}
 function validate(hostList, commList, relList) {
   if (!Array.isArray(relList)) throw Error("Relationships JSON must contain an array.");
   if (!Array.isArray(hostList) || !Array.isArray(commList)) throw Error('Both JSON files must contain arrays.');
@@ -33,9 +52,17 @@ function validate(hostList, commList, relList) {
   });
   const edgeIds = new Set();
   commList.forEach((c, i) => {
-    if (!c || typeof c.id !== 'string' || !c.id || edgeIds.has(c.id) || !ids.has(c.source) || !ids.has(c.target) || !['TCP','UDP'].includes(c.protocol) || !Number.isInteger(c.port) || c.port < 1 || c.port > 65535) throw Error(`Invalid communication at index ${i}. Check unique id, source/target, protocol and port.`);
-    if (c.bidirectional !== undefined && !['yes', 'no'].includes(c.bidirectional)) throw Error(`Invalid bidirectional on communication ${c.id}: use \"yes\" or \"no\".`);
+    if (!c || typeof c.id !== 'string' || !c.id || edgeIds.has(c.id) || !['TCP','UDP'].includes(c.protocol) || !Number.isInteger(c.port) || c.port < 1 || c.port > 65535) throw Error(`Invalid communication at index ${i}. Check unique id, protocol and port.`);
+    const sources = endpointIds(c.source, 'source', c.id);
+    const targets = endpointIds(c.target, 'target', c.id);
+    if (sources.some(id => !ids.has(id)) || targets.some(id => !ids.has(id))) throw Error(`Communication ${c.id} references an unknown source or target.`);
+    if (c.bidirectional !== undefined && !['yes', 'no'].includes(c.bidirectional)) throw Error(`Invalid bidirectional on communication ${c.id}: use "yes" or "no".`);
     edgeIds.add(c.id);
+  });
+  const expandedIds = new Set();
+  expandCommunications(commList).forEach(c => {
+    if (expandedIds.has(c.id)) throw Error(`Duplicate expanded communication ID: ${c.id}`);
+    expandedIds.add(c.id);
   });
   const definitionIds = new Set();
   relList.forEach((r, i) => {
@@ -61,7 +88,7 @@ async function loadDefaults() {
 }
 function setData(h, c, r, resetFilters = false) {
   validate(h, c, r);
-  hosts = h; communications = c; relationshipDefinitions = r; relationships = expandRelationships(r); expandedGroups.clear();
+  hosts = h; communicationDefinitions = c; communications = expandCommunications(c); relationshipDefinitions = r; relationships = expandRelationships(r); expandedGroups.clear();
   if (resetFilters) { filters = []; $('search').value = ''; }
   else filters = filters.filter(f => hosts.some(item => safeValues(item, f.key).includes(f.value)));
   rebuildSelectors(); renderChips(); buildGraph(); refresh();
@@ -92,6 +119,7 @@ function renderChips() {
 function colorFor(host) {
   if(host.type === 'load_balanced_service') return '#cceadf';
   if(host.type === 'user') return '#fae3c7';
+  if(host.type === 'cloud') return '#dbe6f4';
   const env = safeValues(host,'environment').join(' ').toLowerCase();
   return env.includes('test') || env.includes('dev') ? '#eddcb4' : '#dce9fb';
 }
@@ -106,6 +134,7 @@ function buildGraph() {
     style: [
       {selector:'node',style:{'background-color':'data(color)','label':'data(label)','color':'#203b5a','font-size':12,'font-weight':600,'text-valign':'center','text-halign':'center','text-wrap':'wrap','text-max-width':'108px','shape':'round-rectangle','width':136,'height':52,'border-width':1.5,'border-color':'#92adcd','overlay-opacity':0}},
       {selector:'node[kind = "load_balanced_service"]',style:{'shape':'round-diamond','width':164,'height':72,'border-color':'#548e79'}},
+      {selector:'node[kind = "cloud"]',style:{'shape':'round-rectangle','width':150,'height':76,'background-color':'#dbe6f4','border-color':'#6b89a8','border-style':'dashed','border-width':2,'font-size':12}},
       {selector:'node[kind = "user"]',style:{'shape':'ellipse','width':108,'height':88,'background-color':'#fae3c7','border-color':'#c58c45','text-max-width':'98px','font-size':12}},
       {selector:'node[kind = "auto_group"]',style:{'shape':'round-rectangle','width':174,'height':68,'background-color':'#d9e8f1','border-color':'#387da7','border-width':3,'font-size':13}},
       {selector:'edge',style:{'width':2,'curve-style':'bezier','control-point-step-size':55,'line-color':'#7e9bb8','target-arrow-shape':'triangle','target-arrow-color':'#527da4','arrow-scale':1.1,'label':'data(label)','font-size':10,'color':'#36536d','text-background-color':'#ffffff','text-background-opacity':.95,'text-background-padding':'3px','text-rotation':'none','text-border-color':'#d8e1eb','text-border-opacity':1,'text-border-width':.5,'text-margin-y':-8,'overlay-opacity':0}},
@@ -172,7 +201,7 @@ function drawGraph(visibleRel) {
       return {group:'nodes',data:{id,label:`${members.length} matching servers\n${members.map(x=>hosts.find(h=>h.id===x)?.name).slice(0,2).join(', ')}${members.length>2?'…':''}`,kind:'auto_group',color:'#d9e8f1'}};
     }
     const h=hosts.find(h=>h.id===id);
-    return {group:'nodes',data:{id,label:h.type==='user'?`👤\n${h.name}`:h.name,kind:h.type||'server',color:colorFor(h)}};
+    return {group:'nodes',data:{id,label:h.type==='user'?`👤\n${h.name}`:h.type==='cloud'?`☁\n${h.name}`:h.name,kind:h.type||'server',color:colorFor(h)}};
   });
   const bundleMap=new Map();
   visibleComms.forEach(c=>{
@@ -339,7 +368,7 @@ function download(name, content, type='application/json') {
 async function importFile(file,kind){
   if(!file)return;
   try {const parsed=JSON.parse(await file.text());
-    if(kind==='hosts')setData(parsed,communications,relationships,true);else if(kind==='comms')setData(hosts,parsed,relationships,true);else setData(hosts,communications,parsed,true);
+    if(kind==='hosts')setData(parsed,communicationDefinitions,relationshipDefinitions,true);else if(kind==='comms')setData(hosts,parsed,relationshipDefinitions,true);else setData(hosts,communicationDefinitions,parsed,true);
   }catch(e){error(`Import failed: ${e.message}. Existing data was kept.`);}
 }
 function autoLayout(){
@@ -366,7 +395,7 @@ function wire(){
   $('importHosts').addEventListener('change',e=>{importFile(e.target.files[0],'hosts');e.target.value='';});
   $('importComms').addEventListener('change',e=>{importFile(e.target.files[0],'comms');e.target.value='';});
   $('exportHosts').onclick=()=>download('hosts.json',JSON.stringify(hosts,null,2));
-  $('exportComms').onclick=()=>download('communications.json',JSON.stringify(communications,null,2));
+  $('exportComms').onclick=()=>download('communications.json',JSON.stringify(communicationDefinitions,null,2));
   $('importRelationships').addEventListener('change',e=>{importFile(e.target.files[0],'relationships');e.target.value='';});
   $('exportRelationships').onclick=()=>download('relationships.json',JSON.stringify(relationshipDefinitions,null,2));
   $('resetData').onclick=()=>loadDefaults().catch(e=>error(e.message));
