@@ -1,20 +1,12 @@
 [
   {
-    "id": "membership-app-1",
+    "id": "membership-app",
     "source": "app-vip",
-    "target": "app01",
-    "type": "member"
-  },
-  {
-    "id": "membership-app-2",
-    "source": "app-vip",
-    "target": "app02",
-    "type": "member"
-  },
-  {
-    "id": "membership-app-3",
-    "source": "app-vip",
-    "target": "app03",
+    "target": [
+      "app01",
+      "app02",
+      "app03"
+    ],
     "type": "member"
   }
 ]

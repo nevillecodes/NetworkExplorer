@@ -305,5 +305,90 @@
         "Production"
       ]
     }
+  },
+  {
+    "id": "worker01",
+    "name": "WORKER-01",
+    "type": "server",
+    "attributes": {
+      "ip": [
+        "10.10.60.11"
+      ],
+      "service": [
+        "Batch Processing"
+      ],
+      "vlan": [
+        160
+      ],
+      "environment": [
+        "Production"
+      ],
+      "site": [
+        "Civic"
+      ]
+    }
+  },
+  {
+    "id": "worker02",
+    "name": "WORKER-02",
+    "type": "server",
+    "attributes": {
+      "ip": [
+        "10.10.60.12"
+      ],
+      "service": [
+        "Batch Processing"
+      ],
+      "vlan": [
+        160
+      ],
+      "environment": [
+        "Production"
+      ],
+      "site": [
+        "Civic"
+      ]
+    }
+  },
+  {
+    "id": "worker03",
+    "name": "WORKER-03",
+    "type": "server",
+    "attributes": {
+      "ip": [
+        "10.10.60.13"
+      ],
+      "service": [
+        "Batch Processing"
+      ],
+      "vlan": [
+        160
+      ],
+      "environment": [
+        "Production"
+      ],
+      "site": [
+        "Civic"
+      ]
+    }
+  },
+  {
+    "id": "user-alex",
+    "name": "Alex (User)",
+    "type": "user",
+    "attributes": {
+      "service": [
+        "Customer Portal"
+      ],
+      "site": [
+        "Civic"
+      ],
+      "environment": [
+        "Production"
+      ],
+      "role": [
+        "End User"
+      ]
+    }
   }
 ]

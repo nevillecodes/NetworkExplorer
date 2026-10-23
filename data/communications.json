@@ -162,5 +162,85 @@
     "protocol": "TCP",
     "port": 22,
     "description": "Direct SSH monitoring"
+  },
+  {
+    "id": "worker01-db01-3306",
+    "source": "worker01",
+    "target": "db01",
+    "protocol": "TCP",
+    "port": 3306,
+    "description": "Batch writes"
+  },
+  {
+    "id": "worker01-db01-443",
+    "source": "worker01",
+    "target": "db01",
+    "protocol": "TCP",
+    "port": 443,
+    "description": "Status API"
+  },
+  {
+    "id": "worker01-ntp01-123",
+    "source": "worker01",
+    "target": "ntp01",
+    "protocol": "UDP",
+    "port": 123,
+    "description": "NTP synchronisation"
+  },
+  {
+    "id": "worker02-db01-3306",
+    "source": "worker02",
+    "target": "db01",
+    "protocol": "TCP",
+    "port": 3306,
+    "description": "Batch writes"
+  },
+  {
+    "id": "worker02-db01-443",
+    "source": "worker02",
+    "target": "db01",
+    "protocol": "TCP",
+    "port": 443,
+    "description": "Status API"
+  },
+  {
+    "id": "worker02-ntp01-123",
+    "source": "worker02",
+    "target": "ntp01",
+    "protocol": "UDP",
+    "port": 123,
+    "description": "NTP synchronisation"
+  },
+  {
+    "id": "worker03-db01-3306",
+    "source": "worker03",
+    "target": "db01",
+    "protocol": "TCP",
+    "port": 3306,
+    "description": "Batch writes"
+  },
+  {
+    "id": "worker03-db01-443",
+    "source": "worker03",
+    "target": "db01",
+    "protocol": "TCP",
+    "port": 443,
+    "description": "Status API"
+  },
+  {
+    "id": "worker03-ntp01-123",
+    "source": "worker03",
+    "target": "ntp01",
+    "protocol": "UDP",
+    "port": 123,
+    "description": "NTP synchronisation"
+  },
+  {
+    "id": "user-portal-443",
+    "source": "user-alex",
+    "target": "app-vip",
+    "protocol": "TCP",
+    "port": 443,
+    "description": "Browser access to application VIP"
   }
 ]
