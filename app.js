@@ -129,16 +129,22 @@ function buildGraph() {
   cy.on('dragfree','node', savePositions);
 }
 // Structural equivalence is computed from the complete dataset, not the current filter.
-// A signature retains direction, protocol, port and the exact remote endpoint.
+// A signature retains direction, protocol, port, exact remote endpoint, and complete cluster membership.
 function communicationGroups() {
   const signatures = new Map();
+  const clustersByMember = new Map();
+  relationships.filter(r => r.type === 'member').forEach(r => {
+    if (!clustersByMember.has(r.target)) clustersByMember.set(r.target, new Set());
+    clustersByMember.get(r.target).add(r.source);
+  });
   hosts.filter(h => (h.type || 'server') === 'server').forEach(h => {
     const tokens = communications.filter(c=>c.source===h.id || c.target===h.id)
       .map(c=>`${c.source===h.id?'OUT':'IN'}|${c.protocol}|${c.port}|${c.source===h.id?c.target:c.source}`)
       .sort();
     // Prevent empty-signature hosts being merged into unrelated sets.
     if (!tokens.length) return;
-    const key=JSON.stringify([h.type||'server',safeValues(h,'service').sort(),safeValues(h,'site').sort(),tokens]);
+    const clusterIds = [...(clustersByMember.get(h.id) || [])].sort();
+    const key=JSON.stringify([h.type||'server',safeValues(h,'service').sort(),safeValues(h,'site').sort(),clusterIds,tokens]);
     if(!signatures.has(key))signatures.set(key,[]);
     signatures.get(key).push(h.id);
   });
