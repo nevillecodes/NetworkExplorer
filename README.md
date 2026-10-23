@@ -17,7 +17,7 @@ No npm, Node.js, server-side code, database, account or build process is require
 ## Edit your data
 
 - `data/hosts.json`: a JSON array of hosts with unique stable string `id`, string `name`, and `attributes` object. Attribute values can be arrays (recommended) or scalars. Add arbitrary attribute keys.
-- `data/communications.json`: a JSON array of distinct directed communications, each with unique `id`, `source` and `target` referencing a host ID, uppercase `protocol` (`TCP` or `UDP`), and integer destination `port` (1–65535). Optional `description`.
+- `data/communications.json`: a JSON array of distinct directed communications, each with unique `id`, `source` and `target` referencing a host ID, uppercase `protocol` (`TCP` or `UDP`), and integer destination `port` (1–65535). Optional `description` and `bidirectional` (`"yes"` or `"no"`; default `"no"`).
 
 Every connection is a separate entry. Two hosts may have zero or many links, including reverse links. The arrow represents *connection initiation*, not the direction of response packets.
 
@@ -94,3 +94,13 @@ Filter `service = Batch Processing`. WORKER-01, WORKER-02 and WORKER-03 should b
 ## v7 — Cluster-aware automatic grouping
 
 Two servers may be visually consolidated only if they have identical full-dataset communications, service values, site values **and load-balanced cluster memberships**. Cluster membership compares the complete set of logical cluster/VIP IDs where the server appears as a target in `relationships.json` (including array-valued targets). Thus two servers in different load-balanced pools cannot be auto-grouped even if their network communications are otherwise identical. A member of multiple clusters only groups with other members belonging to exactly those same clusters. Servers belonging to no clusters can still group with other unassigned servers. The matching is recalculated when relationships are imported or default data is loaded. This is a grouping restriction only: service filtering continues to ignore membership as a reason to include otherwise irrelevant nodes.
+
+## v8 — Optional bidirectional communications
+
+Set `"bidirectional": "yes"` on any communication to draw arrowheads at **both** ends of its line. Omit the property, or use `"bidirectional": "no"`, for the existing source-to-target arrow. The field accepts only the lowercase strings `"yes"` and `"no"`; other values are rejected when loading/importing data. Example:
+
+```json
+{ "id": "c01", "source": "web01", "target": "app01", "protocol": "TCP", "port": 443, "bidirectional": "yes" }
+```
+
+Bundled ports are separated by their directionality: records with `"yes"` are never combined visually with one-way records, even if their endpoints match. Clicking a bundled edge shows the exact individual records and indicates bidirectionality. Structural-equivalence grouping also distinguishes bidirectional from one-way connections. A bidirectional flag changes the **visual meaning of the connection**; it does not create a reverse communication record or expand dependency-filter traversal. For literal traffic flow analysis, the data should explicitly describe both directions or the filtering model should be extended. The sample `c01` record is marked bidirectional for testing.

@@ -15,6 +15,7 @@ function safeValues(host, key) {
   const v = host.attributes?.[key];
   return Array.isArray(v) ? v.map(String) : v == null ? [] : [String(v)];
 }
+function isBidirectional(c) { return c.bidirectional === 'yes'; }
 function expandRelationships(definitions) {
   return definitions.flatMap(r => {
     const targets = Array.isArray(r.target) ? r.target : [r.target];
@@ -33,6 +34,7 @@ function validate(hostList, commList, relList) {
   const edgeIds = new Set();
   commList.forEach((c, i) => {
     if (!c || typeof c.id !== 'string' || !c.id || edgeIds.has(c.id) || !ids.has(c.source) || !ids.has(c.target) || !['TCP','UDP'].includes(c.protocol) || !Number.isInteger(c.port) || c.port < 1 || c.port > 65535) throw Error(`Invalid communication at index ${i}. Check unique id, source/target, protocol and port.`);
+    if (c.bidirectional !== undefined && !['yes', 'no'].includes(c.bidirectional)) throw Error(`Invalid bidirectional on communication ${c.id}: use \"yes\" or \"no\".`);
     edgeIds.add(c.id);
   });
   const definitionIds = new Set();
@@ -107,12 +109,13 @@ function buildGraph() {
       {selector:'node[kind = "user"]',style:{'shape':'ellipse','width':108,'height':88,'background-color':'#fae3c7','border-color':'#c58c45','text-max-width':'98px','font-size':12}},
       {selector:'node[kind = "auto_group"]',style:{'shape':'round-rectangle','width':174,'height':68,'background-color':'#d9e8f1','border-color':'#387da7','border-width':3,'font-size':13}},
       {selector:'edge',style:{'width':2,'curve-style':'bezier','control-point-step-size':55,'line-color':'#7e9bb8','target-arrow-shape':'triangle','target-arrow-color':'#527da4','arrow-scale':1.1,'label':'data(label)','font-size':10,'color':'#36536d','text-background-color':'#ffffff','text-background-opacity':.95,'text-background-padding':'3px','text-rotation':'none','text-border-color':'#d8e1eb','text-border-opacity':1,'text-border-width':.5,'text-margin-y':-8,'overlay-opacity':0}},
+      {selector:'edge[bidirectional = "yes"]',style:{'source-arrow-shape':'triangle','source-arrow-color':'#527da4'}},
       {selector:'edge[kind = "relationship"]',style:{'line-style':'dashed','line-color':'#98a4b2','target-arrow-shape':'none','label':'data(label)','width':1.6}},
       {selector:'node:selected',style:{'border-width':4,'border-color':'#2874d0','background-color':'#c6dcfa'}},
-      {selector:'edge:selected',style:{'width':4,'line-color':'#2364bc','target-arrow-color':'#2364bc'}},
+      {selector:'edge:selected',style:{'width':4,'line-color':'#2364bc','target-arrow-color':'#2364bc','source-arrow-color':'#2364bc'}},
       {selector:'.matched',style:{'border-color':'#3a8b70','border-width':3}},
       {selector:'.dimmed',style:{'opacity':.14}},
-      {selector:'.highlightEdge',style:{'width':3.5,'line-color':'#2375c1','target-arrow-color':'#2375c1','opacity':1}},
+      {selector:'.highlightEdge',style:{'width':3.5,'line-color':'#2375c1','target-arrow-color':'#2375c1','source-arrow-color':'#2375c1','opacity':1}},
       {selector:'.highlightNode',style:{'opacity':1}},
       {selector:'.found',style:{'border-width':5,'border-color':'#e59e30'}}
     ],
@@ -139,7 +142,7 @@ function communicationGroups() {
   });
   hosts.filter(h => (h.type || 'server') === 'server').forEach(h => {
     const tokens = communications.filter(c=>c.source===h.id || c.target===h.id)
-      .map(c=>`${c.source===h.id?'OUT':'IN'}|${c.protocol}|${c.port}|${c.source===h.id?c.target:c.source}`)
+      .map(c=>`${c.source===h.id?'OUT':'IN'}|${c.protocol}|${c.port}|${c.source===h.id?c.target:c.source}|${isBidirectional(c)?'BOTH':'ONE'}`)
       .sort();
     // Prevent empty-signature hosts being merged into unrelated sets.
     if (!tokens.length) return;
@@ -175,7 +178,7 @@ function drawGraph(visibleRel) {
   visibleComms.forEach(c=>{
     const from=representative.get(c.source),to=representative.get(c.target);
     if(from===to)return; // internal edges are inspectable in expanded view
-    const key=$('bundlePorts').checked?JSON.stringify([from,to]):c.id;
+    const key=$('bundlePorts').checked?JSON.stringify([from,to,isBidirectional(c)]):c.id;
     if(!bundleMap.has(key))bundleMap.set(key,{source:from,target:to,comms:[]});
     bundleMap.get(key).comms.push(c);
   });
@@ -185,7 +188,7 @@ function drawGraph(visibleRel) {
     const labels=[...new Set(record.comms.map(c=>`${c.protocol} ${c.port}`))];
     const label=record.comms.length===1?labels[0]:labels.length===1?`${labels[0]} ×${record.comms.length}`:`${labels.length} ports · ${record.comms.length} links`;
     displayEdges.set(id,record.comms);
-    items.push({group:'edges',data:{id,source:record.source,target:record.target,label,kind:'communication'}});
+    items.push({group:'edges',data:{id,source:record.source,target:record.target,label,kind:'communication',bidirectional:isBidirectional(record.comms[0])?'yes':'no'}});
   });
   const membershipBundles = new Map();
   visibleRel.forEach(r => {
@@ -307,7 +310,7 @@ function inspect() {
     for(const [title,items,isIncoming] of [['Outgoing',outgoing,false],['Incoming',incoming,true]]){
       const s=section(`${title} communications (${items.length})`,panel);
       if(!items.length)s.append(el('p','caption','None in the current view.'));
-      items.forEach(c=>{const d=el('div','comm');d.append(hostLink(isIncoming?c.source:c.target));d.append(el('small','',` · ${c.protocol} ${c.port}${c.description?' — '+c.description:''}`));s.append(d);});
+      items.forEach(c=>{const d=el('div','comm');d.append(hostLink(isIncoming?c.source:c.target));d.append(el('small','',` · ${c.protocol} ${c.port}${isBidirectional(c)?' · bidirectional':''}${c.description?' — '+c.description:''}`));s.append(d);});
     }
     const connected=new Set([h.id]);const related=new Set();
     visibleComms.forEach(c=>{if(c.source===h.id||c.target===h.id){connected.add(c.source);connected.add(c.target);related.add(c.id);}});
@@ -325,7 +328,7 @@ function inspect() {
     const s=section('Underlying connections',panel);
     records.forEach(c=>{
       const line=el('div','comm');
-      line.append(hostLink(c.source),el('span','caption',' → '),hostLink(c.target),el('small','',` · ${c.protocol} ${c.port}${c.description?' — '+c.description:''}`));s.append(line);
+      line.append(hostLink(c.source),el('span','caption',isBidirectional(c)?' ↔ ':' → '),hostLink(c.target),el('small','',` · ${c.protocol} ${c.port}${isBidirectional(c)?' · bidirectional':''}${c.description?' — '+c.description:''}`));s.append(line);
     });
   } else panel.append(el('p','help','Select a host or communication to inspect its attributes and connections.'));
 }
