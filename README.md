@@ -83,3 +83,10 @@ Enable **Bundle ports between the same endpoints** to draw one arrow per display
 ### Try the new feature
 
 Filter `service = Batch Processing`. WORKER-01, WORKER-02 and WORKER-03 should be displayed as a single group, with links to DB-01 and NTP-01. Click the group and choose **Expand these servers** to see the individual nodes. With **Bundle ports** enabled, the DB connection is one bundled arrow; click it to inspect the two ports used by each worker.
+
+## v6 — Membership bundling, user nodes and relationship arrays
+
+- **Bundle membership lines to grouped servers** independently of port bundling. If multiple membership records collapse onto the same *displayed* endpoints, a single dashed line labelled with the number of members appears. Clicking it shows every original membership. Memberships are never reinterpreted as network communications. If a group is expanded, the underlying lines become individually visible.
+- Host records may use `"type": "user"`. Users appear as circular, person-marked nodes, can have arbitrary attributes, and may initiate or receive communications just like other elements. They are never automatically grouped with servers. A sample user, Alex, connects to APP-VIP on TCP 443. A user node need not have an IP address if the source IP is not fixed or known.
+- `relationships.json` accepts either `"target": "app01"` or `"target": ["app01", "app02", "app03"]`. Each array member becomes an independent relationship internally; imported/exported relationship definitions retain their original shape. Targets must be nonempty, unique, and point to known nodes. A multi-target record has one base ID; the explorer derives per-target internal IDs.
+- Filtering still follows actual communications; cluster memberships do not make otherwise irrelevant nodes appear. Bundling only reduces display clutter; no original endpoints are lost.

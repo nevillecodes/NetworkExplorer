@@ -1,7 +1,7 @@
 'use strict';
 // Network Explorer: plain JavaScript, Cytoscape.js, and three JSON files.
 const $ = id => document.getElementById(id);
-let hosts = [], communications = [], relationships = [], cy, filters = [], selectedId = null, selectedEdgeId = null;
+let hosts = [], communications = [], relationships = [], relationshipDefinitions = [], cy, filters = [], selectedId = null, selectedEdgeId = null;
 let visibleIds = new Set(), matchedIds = new Set(), visibleComms = [];
 let displayGroups = new Map(), displayEdges = new Map(), expandedGroups = new Set();
 const stored = { positions: {} };
@@ -14,6 +14,12 @@ function error(message) {
 function safeValues(host, key) {
   const v = host.attributes?.[key];
   return Array.isArray(v) ? v.map(String) : v == null ? [] : [String(v)];
+}
+function expandRelationships(definitions) {
+  return definitions.flatMap(r => {
+    const targets = Array.isArray(r.target) ? r.target : [r.target];
+    return targets.map(target => ({...r, id: targets.length === 1 ? r.id : `${r.id}::${target}`, target}));
+  });
 }
 function validate(hostList, commList, relList) {
   if (!Array.isArray(relList)) throw Error("Relationships JSON must contain an array.");
@@ -29,8 +35,15 @@ function validate(hostList, commList, relList) {
     if (!c || typeof c.id !== 'string' || !c.id || edgeIds.has(c.id) || !ids.has(c.source) || !ids.has(c.target) || !['TCP','UDP'].includes(c.protocol) || !Number.isInteger(c.port) || c.port < 1 || c.port > 65535) throw Error(`Invalid communication at index ${i}. Check unique id, source/target, protocol and port.`);
     edgeIds.add(c.id);
   });
+  const definitionIds = new Set();
+  relList.forEach((r, i) => {
+    if (!r || typeof r.id !== 'string' || !r.id || definitionIds.has(r.id) || edgeIds.has(r.id)) throw Error(`Invalid/duplicate relationship definition at index ${i}.`);
+    definitionIds.add(r.id);
+    const targets = Array.isArray(r.target) ? r.target : [r.target];
+    if (!targets.length || targets.some(t => typeof t !== 'string') || new Set(targets).size !== targets.length) throw Error(`Relationship ${r.id} has invalid or duplicate target IDs.`);
+  });
   const relIds = new Set();
-  relList.forEach((r,i) => {
+  expandRelationships(relList).forEach((r,i) => {
     if(!r || typeof r.id !== 'string' || !r.id || relIds.has(r.id) || edgeIds.has(r.id) || !ids.has(r.source) || !ids.has(r.target) || r.source === r.target || r.type !== 'member') throw Error(`Invalid relationship at index ${i}. Use unique id, existing source/target and type member.`);
     if((hostList.find(h=>h.id===r.source)?.type || 'server') !== 'load_balanced_service') throw Error(`Relationship ${r.id} must originate at a load_balanced_service.`);
     relIds.add(r.id);
@@ -46,7 +59,7 @@ async function loadDefaults() {
 }
 function setData(h, c, r, resetFilters = false) {
   validate(h, c, r);
-  hosts = h; communications = c; relationships = r; expandedGroups.clear();
+  hosts = h; communications = c; relationshipDefinitions = r; relationships = expandRelationships(r); expandedGroups.clear();
   if (resetFilters) { filters = []; $('search').value = ''; }
   else filters = filters.filter(f => hosts.some(item => safeValues(item, f.key).includes(f.value)));
   rebuildSelectors(); renderChips(); buildGraph(); refresh();
@@ -76,6 +89,7 @@ function renderChips() {
 }
 function colorFor(host) {
   if(host.type === 'load_balanced_service') return '#cceadf';
+  if(host.type === 'user') return '#fae3c7';
   const env = safeValues(host,'environment').join(' ').toLowerCase();
   return env.includes('test') || env.includes('dev') ? '#eddcb4' : '#dce9fb';
 }
@@ -90,9 +104,10 @@ function buildGraph() {
     style: [
       {selector:'node',style:{'background-color':'data(color)','label':'data(label)','color':'#203b5a','font-size':12,'font-weight':600,'text-valign':'center','text-halign':'center','text-wrap':'wrap','text-max-width':'108px','shape':'round-rectangle','width':136,'height':52,'border-width':1.5,'border-color':'#92adcd','overlay-opacity':0}},
       {selector:'node[kind = "load_balanced_service"]',style:{'shape':'round-diamond','width':164,'height':72,'border-color':'#548e79'}},
+      {selector:'node[kind = "user"]',style:{'shape':'ellipse','width':108,'height':88,'background-color':'#fae3c7','border-color':'#c58c45','text-max-width':'98px','font-size':12}},
       {selector:'node[kind = "auto_group"]',style:{'shape':'round-rectangle','width':174,'height':68,'background-color':'#d9e8f1','border-color':'#387da7','border-width':3,'font-size':13}},
       {selector:'edge',style:{'width':2,'curve-style':'bezier','control-point-step-size':55,'line-color':'#7e9bb8','target-arrow-shape':'triangle','target-arrow-color':'#527da4','arrow-scale':1.1,'label':'data(label)','font-size':10,'color':'#36536d','text-background-color':'#ffffff','text-background-opacity':.95,'text-background-padding':'3px','text-rotation':'none','text-border-color':'#d8e1eb','text-border-opacity':1,'text-border-width':.5,'text-margin-y':-8,'overlay-opacity':0}},
-      {selector:'edge[kind = "relationship"]',style:{'line-style':'dashed','line-color':'#98a4b2','target-arrow-shape':'none','label':'','width':1.6}},
+      {selector:'edge[kind = "relationship"]',style:{'line-style':'dashed','line-color':'#98a4b2','target-arrow-shape':'none','label':'data(label)','width':1.6}},
       {selector:'node:selected',style:{'border-width':4,'border-color':'#2874d0','background-color':'#c6dcfa'}},
       {selector:'edge:selected',style:{'width':4,'line-color':'#2364bc','target-arrow-color':'#2364bc'}},
       {selector:'.matched',style:{'border-color':'#3a8b70','border-width':3}},
@@ -148,7 +163,7 @@ function drawGraph(visibleRel) {
       return {group:'nodes',data:{id,label:`${members.length} matching servers\n${members.map(x=>hosts.find(h=>h.id===x)?.name).slice(0,2).join(', ')}${members.length>2?'…':''}`,kind:'auto_group',color:'#d9e8f1'}};
     }
     const h=hosts.find(h=>h.id===id);
-    return {group:'nodes',data:{id,label:h.name,kind:h.type||'server',color:colorFor(h)}};
+    return {group:'nodes',data:{id,label:h.type==='user'?`👤\n${h.name}`:h.name,kind:h.type||'server',color:colorFor(h)}};
   });
   const bundleMap=new Map();
   visibleComms.forEach(c=>{
@@ -166,12 +181,19 @@ function drawGraph(visibleRel) {
     displayEdges.set(id,record.comms);
     items.push({group:'edges',data:{id,source:record.source,target:record.target,label,kind:'communication'}});
   });
-  visibleRel.forEach(r=>{
-    const source=representative.get(r.source),target=representative.get(r.target);
-    if(source===target)return;
-    const id='relation:'+r.id;
-    displayEdges.set(id,[r]);
-    items.push({group:'edges',data:{id,source,target,label:'',kind:'relationship'}});
+  const membershipBundles = new Map();
+  visibleRel.forEach(r => {
+    const source = representative.get(r.source), target = representative.get(r.target);
+    if (!source || !target || source === target) return;
+    const key = $('bundleMemberships').checked ? JSON.stringify([source,target,r.type]) : r.id;
+    if (!membershipBundles.has(key)) membershipBundles.set(key,{source,target,records:[]});
+    membershipBundles.get(key).records.push(r);
+  });
+  let relIndex = 0;
+  membershipBundles.forEach(({source,target,records}) => {
+    const id = `relation:${relIndex++}`;
+    displayEdges.set(id, records);
+    items.push({group:'edges',data:{id,source,target,label:records.length>1?`${records.length} members`:'',kind:'relationship'}});
   });
   const prior=new Map();cy.nodes().forEach(n=>prior.set(n.id(),{...n.position()}));
   cy.elements().remove();cy.add(items);
@@ -288,7 +310,7 @@ function inspect() {
     const records=displayEdges.get(selectedEdgeId);if(!records)return;
     cy.getElementById(selectedEdgeId).select();
     if(records[0].type==='member'){
-      panel.append(el('div','detailName','Cluster membership'));
+      panel.append(el('div','detailName',records.length > 1 ? `${records.length} cluster memberships` : 'Cluster membership'));
       const ms=section('Relationship',panel);
       records.forEach(r=>{ms.append(hostLink(r.source),el('p','caption','Contains member'),hostLink(r.target));});
       return;
@@ -326,7 +348,7 @@ function wire(){
   $('attribute').addEventListener('change',rebuildValues);
   $('addFilter').onclick=()=>{const key=$('attribute').value,value=$('value').value;if(!key||value==null)return;if(!filters.some(f=>f.key===key&&f.value===value))filters.push({key,value});renderChips();refresh();};
   $('clearFilters').onclick=()=>{filters=[];renderChips();refresh();};
-  ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts'].forEach(id=>$(id).addEventListener('change',refresh));
+  ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships'].forEach(id=>$(id).addEventListener('change',refresh));
   $('search').addEventListener('input',findSearchMatches);
   $('expandReset').onclick=()=>{expandedGroups.clear();selectedId=null;selectedEdgeId=null;refresh();};
   $('unselect').onclick=()=>{selectedId=null;selectedEdgeId=null;inspect();};
@@ -337,7 +359,7 @@ function wire(){
   $('exportHosts').onclick=()=>download('hosts.json',JSON.stringify(hosts,null,2));
   $('exportComms').onclick=()=>download('communications.json',JSON.stringify(communications,null,2));
   $('importRelationships').addEventListener('change',e=>{importFile(e.target.files[0],'relationships');e.target.value='';});
-  $('exportRelationships').onclick=()=>download('relationships.json',JSON.stringify(relationships,null,2));
+  $('exportRelationships').onclick=()=>download('relationships.json',JSON.stringify(relationshipDefinitions,null,2));
   $('resetData').onclick=()=>loadDefaults().catch(e=>error(e.message));
   window.addEventListener('keydown',e=>{if(e.key==='Escape'){selectedId=null;selectedEdgeId=null;inspect();}});
 }
