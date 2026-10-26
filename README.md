@@ -1,3 +1,26 @@
+> **v12.1 layout fix:** Restores full-height diagram canvas after introducing the Data Quality tab.
+
+# Network Explorer v12 — Data quality
+
+**New in v12:** The Data quality sidebar opens an attribute completeness dashboard and a downloadable CSV of incomplete records. Select an attribute (e.g. `gateway`), site, element type and status. Reports default to **required fields**, so `gateway` does not count as missing for user/cloud objects unless you add it to those types' requirements.
+
+In the main network diagram, select an attribute and then **⚠ Is missing** to find elements with absent, null, empty-string, or empty-array values. This diagram filter searches all node types, regardless of which attributes are required. Use additional filters to narrow the selection. Missing-value conditions are included in saved views.
+
+Edit `data/data-quality-rules.json` to choose required fields by type, for example:
+
+```json
+{
+  "server": { "required": ["ip", "service", "site", "vlan", "gateway"] },
+  "load_balanced_service": { "required": ["ip", "service", "site"] },
+  "user": { "required": ["service"] },
+  "cloud": { "required": ["service"] }
+}
+```
+
+You can import/export rules from the Data quality section. For values that are genuinely not applicable, remove that requirement for the element type; literal `N/A` counts as provided. `gateway: []`, `gateway: null`, `gateway: [""]` or omitting `gateway` all count as missing. Rules are loaded from the JSON file on initial page load; imported rules apply in the current session until the page is reloaded, so export them and replace the local file for persistence. No host JSON is modified by reporting.
+
+---
+
 # Network Explorer — v3
 
 A client-side Cytoscape.js network element communications and service dependency viewer.
@@ -72,7 +95,7 @@ Automatic grouping additionally requires an exact match on the hosts’ complete
 
 ## v4 — Automatic communication grouping and port bundling
 
-In **Simplify diagram**, enable **Automatically group matching servers** to replace two or more eligible server nodes with a presentation-only group. Only `type: server` nodes are candidates; VIPs and logical services are never merged. For accuracy, the match is computed against the **complete loaded communications dataset**, not merely currently visible arrows: incoming/outgoing direction, exact remote node ID, TCP/UDP protocol, and destination port must all match. Candidate hosts must also have identical `service` and `site` attribute sets **and exactly the same load-balanced cluster memberships**. A host assigned to multiple sites is grouped only with hosts having the exact same complete site set; missing site values match only other missing site values. Hosts at different sites are never merged into one automatic group. Servers with no communications are not auto-grouped. No hosts, memberships or communications are changed in JSON.
+In **Simplify diagram**, enable **Automatically group matching servers** to replace two or more eligible server nodes with a presentation-only group. Only `type: server` nodes are candidates; VIPs and logical services are never merged. For accuracy, the match is computed against the **complete loaded communications dataset**, not merely currently visible arrows: incoming/outgoing direction, exact remote node ID, TCP/UDP protocol, and destination port must all match. Candidate hosts must also have identical `service`, `site` and `gateway` attribute sets **and exactly the same load-balanced cluster memberships**. A host assigned to multiple sites is grouped only with hosts having the exact same complete site set; missing site values match only other missing site values. Hosts at different sites are never merged into one automatic group. Servers with no communications are not auto-grouped. No hosts, memberships or communications are changed in JSON.
 
 A group only appears when at least two of its members are visible under the current filters. Select a group and press **Expand these servers** to see the individual hosts; **Collapse expanded groups** resets manual expansions. A collapsed grouping does not replace a VIP, and links to pool members remain logically distinct from communications to the VIP.
 
@@ -125,3 +148,14 @@ Bundled ports are separated by their directionality: records with `"yes"` are ne
 Each distinct combination of filters and display settings automatically keeps its own node positions in browser localStorage. Rearranging one service's diagram no longer overwrites another service's layout. To preserve a view permanently, enter a name under **Saved views** and click **Save current view**. This captures filters, display settings, expanded groups, the selected isolated cluster (if applicable), and node positions. Choose it from the dropdown and click **Load view** to restore it. Saving with an existing name replaces that named snapshot after confirmation.
 
 Use **Export saved views JSON** for a portable backup; **Import saved views JSON** merges views by name (incoming names replace existing ones). JSON view exports contain layout metadata, not hosts/communications. Import the matching network data separately. Positions for missing nodes are ignored and new nodes are automatically placed on layout. Browser storage can be cleared, so export saved views for safekeeping. New versions use `networkExplorerLayoutsV10`, separate from older single-map position storage.
+
+
+## Version 11: gateway host attribute
+
+`gateway` is an optional host attribute. It participates automatically in the existing attribute filter dropdown, search, saved views, and host detail panel (all attributes are discovered dynamically). For consistency, an array of strings is recommended, although a single string is also accepted:
+
+```json
+{ "id": "app01", "name": "APP-01", "type": "server", "attributes": { "ip": ["10.10.20.30"], "site": ["Civic"], "service": ["Customer Portal"], "gateway": ["10.10.20.1"] } }
+```
+
+**Automatic server grouping now requires identical sets of `gateway` values** as well as the existing communication, service, site and load-balanced cluster criteria. Missing gateway values match only other missing gateway values. The comparison is order-independent; multiple gateway addresses are supported. This prevents servers with different gateway settings being visually merged. Gateway is metadata only: it does **not** create a communication arrow to a router, infer routing behaviour, or add gateway nodes to filtered diagrams. Model those elements as explicit hosts and communications if needed.

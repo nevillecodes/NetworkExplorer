@@ -47,7 +47,7 @@ function validateSnapshot(x){
   for(const p of Object.values(x.positions))if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))throw Error('Invalid coordinates.');
 }
 
-const DEFAULTS = ['data/hosts.json', 'data/communications.json', 'data/relationships.json'];
+const DEFAULTS = ['data/hosts.json', 'data/communications.json', 'data/relationships.json', 'data/data-quality-rules.json'];
 
 function error(message) {
   const el = $('toast'); el.textContent = message; el.style.display = 'block';
@@ -57,6 +57,50 @@ function safeValues(host, key) {
   const v = host.attributes?.[key];
   return Array.isArray(v) ? v.map(String) : v == null ? [] : [String(v)];
 }
+const MISSING_FILTER = '__network_explorer_missing__';
+let qualityRules = {}, qualityRows = [], qualityMode = false;
+function attributeMissing(host, key) {
+  const value = host.attributes?.[key];
+  if (value == null) return true;
+  const values = Array.isArray(value) ? value : [value];
+  return !values.some(v => v != null && String(v).trim() !== '');
+}
+function matchesCondition(host, condition) {
+  return condition.value === MISSING_FILTER ? attributeMissing(host, condition.key) : safeValues(host, condition.key).includes(condition.value);
+}
+function validateQualityRules(rules) {
+  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) throw Error('Quality rules must be an object keyed by element type.');
+  for (const [type, rule] of Object.entries(rules)) {
+    if (!type.trim() || !rule || !Array.isArray(rule.required) || rule.required.some(k => typeof k !== 'string' || !k.trim()) || new Set(rule.required).size !== rule.required.length) throw Error(`Invalid required fields for ${type}.`);
+  }
+}
+function requiredFor(host) {return qualityRules[host.type || 'server']?.required || [];}
+function missingRequired(host) {return requiredFor(host).filter(key => attributeMissing(host,key));}
+function allQualityKeys(){return [...new Set([...Object.values(qualityRules).flatMap(r=>r.required),...hosts.flatMap(h=>Object.keys(h.attributes||{}))])].sort();}
+function csvCell(v){return '"'+String(v??'').replaceAll('"','""')+'"';}
+function renderQuality(){
+  if (!hosts.length) return;
+  const all = hosts.length, incomplete = hosts.filter(h=>missingRequired(h).length).length;
+  $('qualitySummary').textContent=`${all} elements  ·  ${all-incomplete} complete  ·  ${incomplete} missing at least one required field  ·  ${Math.round(100*(all-incomplete)/all)}% complete`;
+  const keys=allQualityKeys();
+  const current=$('qualityAttribute').value;
+  $('qualityAttribute').replaceChildren(...keys.map(k=>new Option(k,k)));
+  if(keys.includes(current))$('qualityAttribute').value=current;else if(keys.includes('gateway'))$('qualityAttribute').value='gateway';
+  const types=[...new Set(hosts.map(h=>h.type||'server'))].sort(), sites=[...new Set(hosts.flatMap(h=>safeValues(h,'site')))].sort();
+  const fill=(id, values)=>{const previous=$(id).value;$(id).replaceChildren(new Option('All',''),...values.map(v=>new Option(v,v)));if(values.includes(previous))$(id).value=previous;};
+  fill('qualityType',types);fill('qualitySite',sites);
+  const statRows=keys.map(k=>{const relevant=hosts.filter(h=>requiredFor(h).includes(k));const missing=relevant.filter(h=>attributeMissing(h,k)).length;return {k,total:relevant.length,missing};}).filter(x=>x.total);
+  $('qualityStats').replaceChildren(...statRows.map(x=>{const el=document.createElement('div');el.className='qualityStat';const label=document.createElement('span');label.textContent=x.k;const meter=document.createElement('progress');meter.max=x.total;meter.value=x.total-x.missing;const count=document.createElement('span');count.textContent=`${x.total-x.missing}/${x.total} (${x.missing} missing)`;el.append(label,meter,count);return el;}));
+  updateQualityTable();
+}
+function updateQualityTable(){
+  const key=$('qualityAttribute').value, type=$('qualityType').value, site=$('qualitySite').value, status=$('qualityStatus').value;
+  qualityRows=hosts.filter(h=>(!type||(h.type||'server')===type)&&(!site||safeValues(h,'site').includes(site))&&(status==='all'||(status==='allmissing'?missingRequired(h).length>0:(requiredFor(h).includes(key)&&attributeMissing(h,key)))));
+  const body=$('qualityRows');body.replaceChildren();
+  qualityRows.forEach(h=>{const tr=document.createElement('tr');[h.name,h.type||'server',safeValues(h,'site').join(', ')||'—',missingRequired(h).join(', ')||'—'].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td);});body.append(tr);});
+  $('qualityReportCount').textContent=`${qualityRows.length} matching elements`;
+}
+function showQuality(enabled){qualityMode=enabled;$('diagramPanel').hidden=enabled;$('qualityPanel').hidden=!enabled;$('qualityTabBtn').hidden=enabled;$('diagramTabBtn').hidden=!enabled;if(enabled)renderQuality();else if(cy)cy.resize();}
 function isBidirectional(c) { return c.bidirectional === 'yes'; }
 function expandRelationships(definitions) {
   return definitions.flatMap(r => {
@@ -126,34 +170,34 @@ async function loadDefaults() {
     if (!response.ok) throw Error(`Could not load ${url} (${response.status})`);
     return response.json();
   }));
-  setData(results[0], results[1], results[2], true);
+  validateQualityRules(results[3]);qualityRules=results[3];setData(results[0], results[1], results[2], true);
 }
 function setData(h, c, r, resetFilters = false) {
   validate(h, c, r);
   capturePositions(); activeViewKey = null;
   hosts = h; communicationDefinitions = c; communications = expandCommunications(c); relationshipDefinitions = r; relationships = expandRelationships(r); expandedGroups.clear();
   if (resetFilters) { filters = []; $('search').value = ''; }
-  else filters = filters.filter(f => hosts.some(item => safeValues(item, f.key).includes(f.value)));
-  rebuildSelectors(); renderChips(); buildGraph(); refresh();
+  else filters = filters.filter(f => hosts.some(item => f.value===MISSING_FILTER || safeValues(item, f.key).includes(f.value)));
+  rebuildSelectors(); renderChips(); buildGraph(); refresh();renderQuality();
   $('status').textContent = `${hosts.length.toLocaleString()} hosts loaded`;
 }
 function rebuildSelectors() {
   const current = $('attribute').value;
-  const keys = [...new Set(hosts.flatMap(h => Object.keys(h.attributes || {})))].sort();
+  const keys = allQualityKeys();
   $('attribute').replaceChildren(...keys.map(k => new Option(k.replaceAll('_',' '), k)));
   if (keys.includes(current)) $('attribute').value = current;
   rebuildValues();
 }
 function rebuildValues() {
   const vals = [...new Set(hosts.flatMap(h => safeValues(h, $('attribute').value)))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-  $('value').replaceChildren(...vals.map(v => new Option(v,v)));
-  $('addFilter').disabled = !vals.length;
+  $('value').replaceChildren(new Option('⚠ Is missing',MISSING_FILTER),...vals.map(v => new Option(v,v)));
+  $('addFilter').disabled = !$('attribute').value;
 }
 function renderChips() {
   const holder = $('chips'); holder.replaceChildren();
   filters.forEach((f,i) => {
     const chip = document.createElement('span'); chip.className = 'chip';
-    chip.append(document.createTextNode(`${f.key}: ${f.value}`));
+    chip.append(document.createTextNode(`${f.key}: ${f.value===MISSING_FILTER?'is missing':f.value}`));
     const del = document.createElement('button'); del.textContent = '×'; del.title = 'Remove condition';
     del.addEventListener('click', () => {filters.splice(i,1);renderChips();refresh();});
     chip.append(del); holder.append(chip);
@@ -204,7 +248,7 @@ function buildGraph() {
   cy.on('dragfree','node', savePositions);
 }
 // Structural equivalence is computed from the complete dataset, not the current filter.
-// A signature retains direction, protocol, port, exact remote endpoint, and complete cluster membership.
+// A signature retains direction, protocol, port, exact remote endpoint, site, gateway, and complete cluster membership.
 function communicationGroups() {
   const signatures = new Map();
   const clustersByMember = new Map();
@@ -219,7 +263,7 @@ function communicationGroups() {
     // Prevent empty-signature hosts being merged into unrelated sets.
     if (!tokens.length) return;
     const clusterIds = [...(clustersByMember.get(h.id) || [])].sort();
-    const key=JSON.stringify([h.type||'server',safeValues(h,'service').sort(),safeValues(h,'site').sort(),clusterIds,tokens]);
+    const key=JSON.stringify([h.type||'server',safeValues(h,'service').sort(),safeValues(h,'site').sort(),safeValues(h,'gateway').sort(),clusterIds,tokens]);
     if(!signatures.has(key))signatures.set(key,[]);
     signatures.get(key).push(h.id);
   });
@@ -295,7 +339,7 @@ function refresh() {
   const switchedView=activeViewKey!==nextKey;
   if(switchedView){capturePositions();activeViewKey=nextKey;}
   const hasPositions=Object.keys(stored.layouts[nextKey]||{}).length>0;
-  const matched = hosts.filter(h => filters.every(f => safeValues(h,f.key).includes(f.value)));
+  const matched = hosts.filter(h => filters.every(f => matchesCondition(h,f)));
   matchedIds = new Set(matched.map(h=>h.id));
   const protocol = $('protocol').value;
   const eligible = communications.filter(c => protocol === 'all' || c.protocol === protocol);
@@ -428,6 +472,11 @@ function autoLayout(){
 }
 function wire(){
   $('attribute').addEventListener('change',rebuildValues);
+  $('qualityTabBtn').onclick=()=>showQuality(true);$('diagramTabBtn').onclick=()=>showQuality(false);
+  ['qualityAttribute','qualityType','qualitySite','qualityStatus'].forEach(id=>$(id).addEventListener('change',updateQualityTable));
+  $('qualityCsv').onclick=()=>download('network-explorer-data-quality.csv',[['id','name','type','site','missing_required'].map(csvCell).join(','),...qualityRows.map(h=>[h.id,h.name,h.type||'server',safeValues(h,'site').join(';'),missingRequired(h).join(';')].map(csvCell).join(','))].join('\r\n'),'text/csv;charset=utf-8');
+  $('exportQualityRules').onclick=()=>download('data-quality-rules.json',JSON.stringify(qualityRules,null,2));
+  $('importQualityRules').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const r=JSON.parse(await f.text());validateQualityRules(r);qualityRules=r;rebuildSelectors();renderQuality();error('Quality rules imported successfully.');}catch(ex){error(`Quality rules import failed: ${ex.message}`);}};
   $('addFilter').onclick=()=>{const key=$('attribute').value,value=$('value').value;if(!key||value==null)return;if(!filters.some(f=>f.key===key&&f.value===value))filters.push({key,value});renderChips();refresh();};
   $('clearFilters').onclick=()=>{filters=[];renderChips();refresh();};
   ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships'].forEach(id=>$(id).addEventListener('change',refresh));
