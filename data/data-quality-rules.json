@@ -1,0 +1,28 @@
+{
+  "server": {
+    "required": [
+      "ip",
+      "service",
+      "site",
+      "vlan",
+      "gateway"
+    ]
+  },
+  "load_balanced_service": {
+    "required": [
+      "ip",
+      "service",
+      "site"
+    ]
+  },
+  "user": {
+    "required": [
+      "service"
+    ]
+  },
+  "cloud": {
+    "required": [
+      "service"
+    ]
+  }
+}
