@@ -4,7 +4,49 @@ const $ = id => document.getElementById(id);
 let hosts = [], communications = [], communicationDefinitions = [], relationships = [], relationshipDefinitions = [], cy, filters = [], selectedId = null, selectedEdgeId = null;
 let visibleIds = new Set(), matchedIds = new Set(), visibleComms = [];
 let displayGroups = new Map(), displayEdges = new Map(), expandedGroups = new Set();
-const stored = { positions: {} };
+const stored = { positions: {}, layouts: {}, namedViews: {} };
+let activeViewKey = null;
+const VIEW_SETTING_IDS = ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships'];
+function viewSettings() {
+  return Object.fromEntries(VIEW_SETTING_IDS.map(id => [id, $(id).type === 'checkbox' ? $(id).checked : $(id).value]));
+}
+function viewKey() {
+  const conditions = filters.map(f=>[f.key,f.value]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  const opts = viewSettings(); delete opts.portLabels;
+  return JSON.stringify({conditions, opts, expanded:[...expandedGroups].sort(), isolated:opts.clusterMode==='isolated'?selectedId:null});
+}
+function persistLayouts(){
+  try { localStorage.setItem('networkExplorerLayoutsV10', JSON.stringify({layouts:stored.layouts,namedViews:stored.namedViews})); }
+  catch(e){ $('layoutInfo').textContent='Browser storage unavailable; export saved views to retain them.'; }
+}
+function capturePositions(key=activeViewKey) {
+  if (!cy || !key) return;
+  const positions={};cy.nodes().forEach(n=>{const p=n.position();if(Number.isFinite(p.x)&&Number.isFinite(p.y))positions[n.id()]={x:p.x,y:p.y};});
+  if(Object.keys(positions).length){stored.layouts[key]=positions;persistLayouts();}
+}
+function currentSnapshot(name) {
+  capturePositions();
+  return {name, filters:filters.map(f=>({...f})), settings:viewSettings(), expandedGroups:[...expandedGroups], selectedId:$('clusterMode').value==='isolated'?selectedId:null, positions:structuredClone(stored.layouts[activeViewKey]||{})};
+}
+function renderSavedViews(selected='') {
+  const names=Object.keys(stored.namedViews).sort((a,b)=>a.localeCompare(b));
+  $('savedView').replaceChildren(new Option('Choose a saved view…',''),...names.map(n=>new Option(n,n)));
+  if(names.includes(selected))$('savedView').value=selected;
+}
+function restoreSnapshot(snapshot){
+  capturePositions();
+  filters=snapshot.filters.map(f=>({...f}));
+  VIEW_SETTING_IDS.forEach(id=>{if(!(id in snapshot.settings))return;const el=$(id); if(el.type==='checkbox')el.checked=Boolean(snapshot.settings[id]);else el.value=String(snapshot.settings[id]);});
+  expandedGroups=new Set(snapshot.expandedGroups||[]);selectedId=snapshot.selectedId||null;selectedEdgeId=null;
+  const key=viewKey();stored.layouts[key]=structuredClone(snapshot.positions);activeViewKey=null;
+  renderChips();refresh();
+}
+function validateSnapshot(x){
+  if(!x||typeof x!=='object'||!Array.isArray(x.filters)||!x.filters.every(f=>f&&typeof f.key==='string'&&typeof f.value==='string')||!x.settings||typeof x.settings!=='object'||!x.positions||typeof x.positions!=='object'||Array.isArray(x.positions))throw Error('Invalid saved view structure.');
+  if(Object.keys(x.positions).length>20000)throw Error('Too many positions in saved view.');
+  for(const p of Object.values(x.positions))if(!p||!Number.isFinite(p.x)||!Number.isFinite(p.y))throw Error('Invalid coordinates.');
+}
+
 const DEFAULTS = ['data/hosts.json', 'data/communications.json', 'data/relationships.json'];
 
 function error(message) {
@@ -88,6 +130,7 @@ async function loadDefaults() {
 }
 function setData(h, c, r, resetFilters = false) {
   validate(h, c, r);
+  capturePositions(); activeViewKey = null;
   hosts = h; communicationDefinitions = c; communications = expandCommunications(c); relationshipDefinitions = r; relationships = expandRelationships(r); expandedGroups.clear();
   if (resetFilters) { filters = []; $('search').value = ''; }
   else filters = filters.filter(f => hosts.some(item => safeValues(item, f.key).includes(f.value)));
@@ -124,7 +167,7 @@ function colorFor(host) {
   return env.includes('test') || env.includes('dev') ? '#eddcb4' : '#dce9fb';
 }
 function savedPosition(id) {
-  const p = stored.positions[id];
+  const p = (stored.layouts[activeViewKey] || {})[id];
   return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? p : undefined;
 }
 function buildGraph() {
@@ -182,7 +225,7 @@ function communicationGroups() {
   });
   return [...signatures.values()].filter(ids=>ids.length>1).map(ids=>ids.sort());
 }
-function drawGraph(visibleRel) {
+function drawGraph(visibleRel, retainPrior = true) {
   const candidates=$('autoGrouping').checked?communicationGroups():[];
   displayGroups=new Map();displayEdges=new Map();
   const representative=new Map([...visibleIds].map(id=>[id,id]));
@@ -233,7 +276,7 @@ function drawGraph(visibleRel) {
     displayEdges.set(id, records);
     items.push({group:'edges',data:{id,source,target,label:records.length>1?`${records.length} members`:'',kind:'relationship'}});
   });
-  const prior=new Map();cy.nodes().forEach(n=>prior.set(n.id(),{...n.position()}));
+  const prior=new Map();if(retainPrior)cy.nodes().forEach(n=>prior.set(n.id(),{...n.position()}));
   cy.elements().remove();cy.add(items);
   cy.nodes().forEach(n=>{
     const p=prior.get(n.id())||savedPosition(n.id());
@@ -245,15 +288,13 @@ function drawGraph(visibleRel) {
     if(filters.length && members.some(id=>matchedIds.has(id)))n.addClass('matched');
   });
 }
-function savePositions() {
-  // Stored only in this browser; export/import JSON remains the portable source of truth.
-  try {
-    cy.nodes().forEach(n => {const p=n.position();stored.positions[n.id()]={x:p.x,y:p.y};});
-    localStorage.setItem('networkExplorerPositions',JSON.stringify(stored.positions));
-  } catch(e) { /* Private browsing may disallow localStorage. */ }
-}
+function savePositions(){capturePositions();}
 function refresh() {
   if (!cy) return;
+  const nextKey=viewKey();
+  const switchedView=activeViewKey!==nextKey;
+  if(switchedView){capturePositions();activeViewKey=nextKey;}
+  const hasPositions=Object.keys(stored.layouts[nextKey]||{}).length>0;
   const matched = hosts.filter(h => filters.every(f => safeValues(h,f.key).includes(f.value)));
   matchedIds = new Set(matched.map(h=>h.id));
   const protocol = $('protocol').value;
@@ -286,7 +327,7 @@ function refresh() {
   }
   const visibleRel = mode === 'collapsed' ? [] : relationships.filter(r =>
     visibleIds.has(r.source) && visibleIds.has(r.target) && (!isolating || r.source === selectedCluster));
-  drawGraph(visibleRel);
+  drawGraph(visibleRel, !switchedView);
   $('hostCount').textContent = `${visibleIds.size.toLocaleString()} elements shown`;
   $('linkCount').textContent = `${visibleComms.length.toLocaleString()} communications`;
   $('matchCount').textContent = `${visibleRel.length} memberships · ${matchedIds.size} matched`;
@@ -294,7 +335,10 @@ function refresh() {
   if (selectedId && !cy.getElementById(selectedId).length) selectedId = null;
   if (selectedEdgeId && !cy.getElementById(selectedEdgeId).length) selectedEdgeId = null;
   findSearchMatches();inspect();
-  if(cy.nodes().length) cy.fit(cy.elements(),55);
+  if(cy.nodes().length){
+    if(!hasPositions)autoLayout();
+    else cy.fit(cy.elements(),55);
+  }
 }
 function findSearchMatches() {
   if(!cy) return;
@@ -392,6 +436,29 @@ function wire(){
   $('unselect').onclick=()=>{selectedId=null;selectedEdgeId=null;inspect();};
   $('fitBtn').onclick=()=>{if(cy.nodes(':visible').length)cy.fit(cy.elements(':visible'),55);};
   $('layoutBtn').onclick=autoLayout;
+  $('saveView').onclick=()=>{
+    const name=$('viewName').value.trim();if(!name){error('Enter a view name first.');return;}
+    if(stored.namedViews[name]&&!confirm(`Overwrite saved view "${name}"?`))return;
+    stored.namedViews[name]=currentSnapshot(name);persistLayouts();renderSavedViews(name);$('layoutInfo').textContent=`Saved "${name}" locally. Export JSON for a backup.`;
+  };
+  $('loadView').onclick=()=>{
+    const name=$('savedView').value;if(!name||!stored.namedViews[name]){error('Choose a saved view.');return;}
+    restoreSnapshot(stored.namedViews[name]);$('viewName').value=name; persistLayouts();
+  };
+  $('deleteView').onclick=()=>{
+    const name=$('savedView').value;if(!name||!stored.namedViews[name])return;
+    if(!confirm(`Delete saved view "${name}"?`))return;
+    delete stored.namedViews[name];persistLayouts();renderSavedViews();
+  };
+  $('exportViews').onclick=()=>{capturePositions();download('network-explorer-views.json',JSON.stringify({format:'network-explorer-views',version:1,views:Object.values(stored.namedViews)},null,2));};
+  $('importViews').addEventListener('change',async e=>{
+    const file=e.target.files[0];e.target.value='';if(!file)return;
+    try{const data=JSON.parse(await file.text());if(data.format!=='network-explorer-views'||data.version!==1||!Array.isArray(data.views))throw Error('Unsupported views file.');
+      if(data.views.length>500)throw Error('Too many views.');
+      const imports={};for(const view of data.views){validateSnapshot(view);if(typeof view.name!=='string'||!view.name.trim()||view.name.length>100)throw Error('Invalid view name.');imports[view.name]=view;}
+      Object.assign(stored.namedViews,imports);persistLayouts();renderSavedViews();$('layoutInfo').textContent=`Imported ${data.views.length} views. Choose one and click Load view.`;
+    }catch(ex){error(`View import failed: ${ex.message}`);}
+  });
   $('importHosts').addEventListener('change',e=>{importFile(e.target.files[0],'hosts');e.target.value='';});
   $('importComms').addEventListener('change',e=>{importFile(e.target.files[0],'comms');e.target.value='';});
   $('exportHosts').onclick=()=>download('hosts.json',JSON.stringify(hosts,null,2));
@@ -404,7 +471,8 @@ function wire(){
 async function main(){
   wire();
   if(typeof cytoscape!=='function'){$('status').textContent='Library unavailable';error('Cytoscape.js could not load. Check your internet connection (the first version uses a CDN).');return;}
-  try{const p=JSON.parse(localStorage.getItem('networkExplorerPositions')||'{}');if(p&&typeof p==='object')stored.positions=p;}catch(e){}
+  try{const data=JSON.parse(localStorage.getItem('networkExplorerLayoutsV10')||'{}');if(data.layouts&&typeof data.layouts==='object')stored.layouts=data.layouts;if(data.namedViews&&typeof data.namedViews==='object')stored.namedViews=data.namedViews;}catch(e){}
+  renderSavedViews();
   try{await loadDefaults();}catch(e){$('status').textContent='Load failed';error(`${e.message}. Serve this folder using python -m http.server 4321.`);}
 }
 document.addEventListener('DOMContentLoaded',main);

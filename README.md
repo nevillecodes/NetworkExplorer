@@ -118,3 +118,10 @@ Bundled ports are separated by their directionality: records with `"yes"` are ne
 - All existing filtering, auto-grouping, bundling, detail inspection and optional `bidirectional` behaviour operate on those individual expanded records. Import/export retains the original compact arrays; exporting will not expand them.
 - The sample includes an External Services cloud and examples of source and target arrays.
 - **Important:** these entries model logical communication relationships; they do not mean that a cloud's unspecified internal hosts have been individually discovered.
+
+
+## Version 10: independent and portable layouts
+
+Each distinct combination of filters and display settings automatically keeps its own node positions in browser localStorage. Rearranging one service's diagram no longer overwrites another service's layout. To preserve a view permanently, enter a name under **Saved views** and click **Save current view**. This captures filters, display settings, expanded groups, the selected isolated cluster (if applicable), and node positions. Choose it from the dropdown and click **Load view** to restore it. Saving with an existing name replaces that named snapshot after confirmation.
+
+Use **Export saved views JSON** for a portable backup; **Import saved views JSON** merges views by name (incoming names replace existing ones). JSON view exports contain layout metadata, not hosts/communications. Import the matching network data separately. Positions for missing nodes are ignored and new nodes are automatically placed on layout. Browser storage can be cleared, so export saved views for safekeeping. New versions use `networkExplorerLayoutsV10`, separate from older single-map position storage.
