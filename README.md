@@ -1,3 +1,9 @@
+# Network Explorer v12.4 — 5-pixel node snapping
+
+After dragging a node, its position snaps to the nearest 5-unit graph grid intersection. The movement remains smooth while dragging; snapping happens only upon release. The snapped position is saved in the current filtered view and in named layout exports. Programmatic rearrangement and previously saved layouts are not forcibly snapped.
+
+---
+
 # Network Explorer v12.2 — Full host communication details
 
 Host Details now lists **all incoming and outgoing communications from the complete dataset**, regardless of current service, attribute, protocol or dependency filtering. The topology itself, visual highlights and edge inspection remain restricted to the active view. Clicking a host name outside the current view opens its details without adding it to the diagram. Array-valued communication endpoints are expanded as usual.
@@ -169,3 +175,7 @@ Use **Export saved views JSON** for a portable backup; **Import saved views JSON
 ### Filtering by host name (v12.3)
 
 The **Filter hosts** attribute selector includes **Host name** in addition to host attributes. Choose a host name from the value list and add the condition; it combines with existing service, site, and other attribute filters. Missing-value checks on host names also work. The separate search field remains highlight-only. The topology retains its normal filtering rules, while host details list the complete unfiltered communications. Saved views retain name conditions.
+
+### Mouse-wheel zoom (v12.5)
+
+Increased Cytoscape.js `wheelSensitivity` from `0.22` to `0.32` (approximately 45% more sensitive). Zoom remains centred on the mouse pointer, and minimum/maximum zoom limits are unchanged.

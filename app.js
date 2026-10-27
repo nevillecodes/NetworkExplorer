@@ -235,7 +235,7 @@ function buildGraph() {
       {selector:'.highlightNode',style:{'opacity':1}},
       {selector:'.found',style:{'border-width':5,'border-color':'#e59e30'}}
     ],
-    minZoom:.12,maxZoom:3,wheelSensitivity:.22,layout:{name:'preset'}
+    minZoom:.12,maxZoom:3,wheelSensitivity:.32,layout:{name:'preset'}
   });
   cy.on('tap','node',e => {
     const id=e.target.id();
@@ -245,7 +245,16 @@ function buildGraph() {
   });
   cy.on('tap','edge',e => {selectedEdgeId=e.target.id();selectedId=null;inspect();});
   cy.on('tap',e => {if(e.target===cy){selectedId=null;selectedEdgeId=null;inspect();}});
-  cy.on('dragfree','node', savePositions);
+  cy.on('dragfree','node', event => {
+    // Snap only when the drag ends, in graph coordinates, so dragging stays smooth.
+    const node = event.target;
+    const pos = node.position();
+    const grid = 5;
+    if (Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
+      node.position({x: Math.round(pos.x / grid) * grid, y: Math.round(pos.y / grid) * grid});
+    }
+    savePositions();
+  });
 }
 // Structural equivalence is computed from the complete dataset, not the current filter.
 // A signature retains direction, protocol, port, exact remote endpoint, site, gateway, and complete cluster membership.
