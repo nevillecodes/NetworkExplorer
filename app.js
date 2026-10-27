@@ -422,11 +422,14 @@ function inspect() {
       (Array.isArray(val)?val:[val]).forEach(v=>line.append(el('span','value',v)));
       attrs.append(line);
     });
-    const incoming=visibleComms.filter(c=>c.target===h.id);
-    const outgoing=visibleComms.filter(c=>c.source===h.id);
+    // Host inspection is independent of the active topology filter. Keep the
+    // graph/highlighting based on visibleComms, but list every recorded link.
+    const incoming=communications.filter(c=>c.target===h.id);
+    const outgoing=communications.filter(c=>c.source===h.id);
+    panel.append(el('p','help','Showing all recorded communications for this host, including connections outside the current filtered diagram. The topology remains filtered.'));
     for(const [title,items,isIncoming] of [['Outgoing',outgoing,false],['Incoming',incoming,true]]){
       const s=section(`${title} communications (${items.length})`,panel);
-      if(!items.length)s.append(el('p','caption','None in the current view.'));
+      if(!items.length)s.append(el('p','caption','No recorded communications.'));
       items.forEach(c=>{const d=el('div','comm');d.append(hostLink(isIncoming?c.source:c.target));d.append(el('small','',` · ${c.protocol} ${c.port}${isBidirectional(c)?' · bidirectional':''}${c.description?' — '+c.description:''}`));s.append(d);});
     }
     const connected=new Set([h.id]);const related=new Set();

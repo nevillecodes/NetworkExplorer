@@ -1,3 +1,9 @@
+# Network Explorer v12.2 — Full host communication details
+
+Host Details now lists **all incoming and outgoing communications from the complete dataset**, regardless of current service, attribute, protocol or dependency filtering. The topology itself, visual highlights and edge inspection remain restricted to the active view. Clicking a host name outside the current view opens its details without adding it to the diagram. Array-valued communication endpoints are expanded as usual.
+
+---
+
 > **v12.1 layout fix:** Restores full-height diagram canvas after introducing the Data Quality tab.
 
 # Network Explorer v12 — Data quality
