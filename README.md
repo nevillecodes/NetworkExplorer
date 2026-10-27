@@ -165,3 +165,7 @@ Use **Export saved views JSON** for a portable backup; **Import saved views JSON
 ```
 
 **Automatic server grouping now requires identical sets of `gateway` values** as well as the existing communication, service, site and load-balanced cluster criteria. Missing gateway values match only other missing gateway values. The comparison is order-independent; multiple gateway addresses are supported. This prevents servers with different gateway settings being visually merged. Gateway is metadata only: it does **not** create a communication arrow to a router, infer routing behaviour, or add gateway nodes to filtered diagrams. Model those elements as explicit hosts and communications if needed.
+
+### Filtering by host name (v12.3)
+
+The **Filter hosts** attribute selector includes **Host name** in addition to host attributes. Choose a host name from the value list and add the condition; it combines with existing service, site, and other attribute filters. Missing-value checks on host names also work. The separate search field remains highlight-only. The topology retains its normal filtering rules, while host details list the complete unfiltered communications. Saved views retain name conditions.

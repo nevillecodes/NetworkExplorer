@@ -54,13 +54,13 @@ function error(message) {
   clearTimeout(error.timer); error.timer = setTimeout(() => el.style.display = 'none', 6000);
 }
 function safeValues(host, key) {
-  const v = host.attributes?.[key];
+  const v = key === 'name' ? host.name : host.attributes?.[key];
   return Array.isArray(v) ? v.map(String) : v == null ? [] : [String(v)];
 }
 const MISSING_FILTER = '__network_explorer_missing__';
 let qualityRules = {}, qualityRows = [], qualityMode = false;
 function attributeMissing(host, key) {
-  const value = host.attributes?.[key];
+  const value = key === 'name' ? host.name : host.attributes?.[key];
   if (value == null) return true;
   const values = Array.isArray(value) ? value : [value];
   return !values.some(v => v != null && String(v).trim() !== '');
@@ -183,8 +183,8 @@ function setData(h, c, r, resetFilters = false) {
 }
 function rebuildSelectors() {
   const current = $('attribute').value;
-  const keys = allQualityKeys();
-  $('attribute').replaceChildren(...keys.map(k => new Option(k.replaceAll('_',' '), k)));
+  const keys = ['name', ...allQualityKeys().filter(k => k !== 'name')];
+  $('attribute').replaceChildren(...keys.map(k => new Option(k === 'name' ? 'Host name' : k.replaceAll('_',' '), k)));
   if (keys.includes(current)) $('attribute').value = current;
   rebuildValues();
 }
