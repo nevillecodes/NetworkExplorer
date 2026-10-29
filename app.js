@@ -54,13 +54,14 @@ function error(message) {
   clearTimeout(error.timer); error.timer = setTimeout(() => el.style.display = 'none', 6000);
 }
 function safeValues(host, key) {
-  const v = key === 'name' ? host.name : host.attributes?.[key];
+  const v = host.attributes?.[key];
   return Array.isArray(v) ? v.map(String) : v == null ? [] : [String(v)];
 }
 const MISSING_FILTER = '__network_explorer_missing__';
 let qualityRules = {}, qualityRows = [], qualityMode = false;
+let queryMode = false, queryConditions = [], queryResults = [], queryColumns = [];
 function attributeMissing(host, key) {
-  const value = key === 'name' ? host.name : host.attributes?.[key];
+  const value = host.attributes?.[key];
   if (value == null) return true;
   const values = Array.isArray(value) ? value : [value];
   return !values.some(v => v != null && String(v).trim() !== '');
@@ -100,7 +101,61 @@ function updateQualityTable(){
   qualityRows.forEach(h=>{const tr=document.createElement('tr');[h.name,h.type||'server',safeValues(h,'site').join(', ')||'—',missingRequired(h).join(', ')||'—'].forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.append(td);});body.append(tr);});
   $('qualityReportCount').textContent=`${qualityRows.length} matching elements`;
 }
-function showQuality(enabled){qualityMode=enabled;$('diagramPanel').hidden=enabled;$('qualityPanel').hidden=!enabled;$('qualityTabBtn').hidden=enabled;$('diagramTabBtn').hidden=!enabled;if(enabled)renderQuality();else if(cy)cy.resize();}
+function showPanel(mode){
+  qualityMode=mode==='quality';queryMode=mode==='query';
+  $('diagramPanel').hidden=mode!=='diagram';$('qualityPanel').hidden=!qualityMode;$('queryPanel').hidden=!queryMode;
+  $('qualityTabBtn').hidden=qualityMode;$('queryTabBtn').hidden=queryMode;$('diagramTabBtn').hidden=mode==='diagram';
+  $('diagramTabBtn').textContent='Return to diagram';
+  if(qualityMode)renderQuality();if(queryMode)renderQuery();if(mode==='diagram'&&cy){cy.resize();}
+}
+function showQuality(enabled){showPanel(enabled?'quality':'diagram');}
+const QUERY_OPS=[['eq','Equals / contains value'],['neq','Does not contain value'],['contains','Text contains'],['missing','Is missing'],['present','Is present']];
+function queryKeys(){return ['id','name','type',...allQualityKeys()];}
+function queryVals(h,key){if(key==='id'||key==='name'||key==='type')return [String(key==='type'?(h.type||'server'):h[key]||'')];return safeValues(h,key);}
+function queryMatch(h,c){
+ const vals=queryVals(h,c.key),needle=String(c.value||'').toLowerCase().trim();
+ if(c.op==='missing')return !vals.some(v=>v.trim());
+ if(c.op==='present')return vals.some(v=>v.trim());
+ if(c.op==='eq')return vals.some(v=>v.toLowerCase()===needle);
+ if(c.op==='neq')return !vals.some(v=>v.toLowerCase()===needle);
+ if(c.op==='contains')return vals.some(v=>v.toLowerCase().includes(needle));
+ return false;
+}
+function queryConditionRow(c){
+ const row=el('div','queryCondition');const field=document.createElement('select');field.setAttribute('aria-label','Attribute');
+ field.replaceChildren(...queryKeys().map(k=>new Option(k,k)));field.value=c.key;
+ const op=document.createElement('select');op.setAttribute('aria-label','Operator');op.replaceChildren(...QUERY_OPS.map(([k,v])=>new Option(v,k)));op.value=c.op;
+ const input=document.createElement('input');input.placeholder='Value';input.setAttribute('aria-label','Comparison value');input.value=c.value;
+ input.disabled=c.op==='missing'||c.op==='present';
+ field.onchange=()=>{c.key=field.value;updateQueryPreview();};
+ op.onchange=()=>{c.op=op.value;input.disabled=c.op==='missing'||c.op==='present';updateQueryPreview();};
+ input.oninput=()=>{c.value=input.value;updateQueryPreview();};
+ const remove=document.createElement('button');remove.textContent='×';remove.title='Remove condition';remove.setAttribute('aria-label','Remove condition');remove.onclick=()=>{queryConditions=queryConditions.filter(x=>x!==c);renderQueryConditions();updateQueryPreview();};
+ row.append(field,op,input,remove);return row;
+}
+function renderQueryConditions(){$('queryConditions').replaceChildren(...queryConditions.map(queryConditionRow));}
+function updateQueryPreview(){
+ const type=$('queryType').value;
+ const clauses=[...(type?[`type = ${JSON.stringify(type)}`]:[]),...queryConditions.map(c=>c.op==='missing'?`${c.key} IS MISSING`:c.op==='present'?`${c.key} IS PRESENT`:`${c.key} ${({eq:'=',neq:'!=',contains:'CONTAINS'})[c.op]} ${JSON.stringify(c.value)}`)];
+ $('queryPreview').textContent=`SELECT ${queryColumns.join(', ')||'id, name, type'} FROM elements${clauses.length?' WHERE '+clauses.join(' AND '):''}`;
+}
+function renderQuery(){
+ const keys=queryKeys();const selected=new Set(queryColumns.length?queryColumns:['name','type','ip','service','site','vlan','gateway']);
+ $('queryColumn').replaceChildren(...keys.map(k=>{const o=new Option(k,k);o.selected=selected.has(k);return o;}));
+ queryColumns=[...$('queryColumn').selectedOptions].map(o=>o.value);
+ const t=$('queryType').value;const types=[...new Set(hosts.map(h=>h.type||'server'))].sort();
+ $('queryType').replaceChildren(new Option('All types',''),...types.map(v=>new Option(v,v)));if(types.includes(t))$('queryType').value=t;
+ renderQueryConditions();runQuery();
+}
+function runQuery(){
+ const type=$('queryType').value;
+ queryResults=hosts.filter(h=>(!type||(h.type||'server')===type)&&queryConditions.every(c=>queryMatch(h,c)));
+ const cols=queryColumns.length?queryColumns:['id','name','type'];
+ const head=document.createElement('tr');cols.forEach(k=>{const th=document.createElement('th');th.textContent=k;head.append(th);});$('queryHead').replaceChildren(head);
+ const body=document.createDocumentFragment();for(const h of queryResults){const tr=document.createElement('tr');for(const key of cols){const td=document.createElement('td');td.textContent=queryVals(h,key).join(', ')||'—';tr.append(td);}body.append(tr);}
+ $('queryRows').replaceChildren(body);$('queryCount').textContent=`${queryResults.length} matching elements (${hosts.length} loaded)`;updateQueryPreview();
+}
+
 function isBidirectional(c) { return c.bidirectional === 'yes'; }
 function expandRelationships(definitions) {
   return definitions.flatMap(r => {
@@ -178,13 +233,13 @@ function setData(h, c, r, resetFilters = false) {
   hosts = h; communicationDefinitions = c; communications = expandCommunications(c); relationshipDefinitions = r; relationships = expandRelationships(r); expandedGroups.clear();
   if (resetFilters) { filters = []; $('search').value = ''; }
   else filters = filters.filter(f => hosts.some(item => f.value===MISSING_FILTER || safeValues(item, f.key).includes(f.value)));
-  rebuildSelectors(); renderChips(); buildGraph(); refresh();renderQuality();
+  rebuildSelectors(); renderChips(); buildGraph(); refresh();renderQuality();renderQuery();
   $('status').textContent = `${hosts.length.toLocaleString()} hosts loaded`;
 }
 function rebuildSelectors() {
   const current = $('attribute').value;
-  const keys = ['name', ...allQualityKeys().filter(k => k !== 'name')];
-  $('attribute').replaceChildren(...keys.map(k => new Option(k === 'name' ? 'Host name' : k.replaceAll('_',' '), k)));
+  const keys = allQualityKeys();
+  $('attribute').replaceChildren(...keys.map(k => new Option(k.replaceAll('_',' '), k)));
   if (keys.includes(current)) $('attribute').value = current;
   rebuildValues();
 }
@@ -235,7 +290,7 @@ function buildGraph() {
       {selector:'.highlightNode',style:{'opacity':1}},
       {selector:'.found',style:{'border-width':5,'border-color':'#e59e30'}}
     ],
-    minZoom:.12,maxZoom:3,wheelSensitivity:.32,layout:{name:'preset'}
+    minZoom:.12,maxZoom:3,wheelSensitivity:.22,layout:{name:'preset'}
   });
   cy.on('tap','node',e => {
     const id=e.target.id();
@@ -245,16 +300,7 @@ function buildGraph() {
   });
   cy.on('tap','edge',e => {selectedEdgeId=e.target.id();selectedId=null;inspect();});
   cy.on('tap',e => {if(e.target===cy){selectedId=null;selectedEdgeId=null;inspect();}});
-  cy.on('dragfree','node', event => {
-    // Snap only when the drag ends, in graph coordinates, so dragging stays smooth.
-    const node = event.target;
-    const pos = node.position();
-    const grid = 5;
-    if (Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-      node.position({x: Math.round(pos.x / grid) * grid, y: Math.round(pos.y / grid) * grid});
-    }
-    savePositions();
-  });
+  cy.on('dragfree','node', savePositions);
 }
 // Structural equivalence is computed from the complete dataset, not the current filter.
 // A signature retains direction, protocol, port, exact remote endpoint, site, gateway, and complete cluster membership.
@@ -431,14 +477,11 @@ function inspect() {
       (Array.isArray(val)?val:[val]).forEach(v=>line.append(el('span','value',v)));
       attrs.append(line);
     });
-    // Host inspection is independent of the active topology filter. Keep the
-    // graph/highlighting based on visibleComms, but list every recorded link.
-    const incoming=communications.filter(c=>c.target===h.id);
-    const outgoing=communications.filter(c=>c.source===h.id);
-    panel.append(el('p','help','Showing all recorded communications for this host, including connections outside the current filtered diagram. The topology remains filtered.'));
+    const incoming=visibleComms.filter(c=>c.target===h.id);
+    const outgoing=visibleComms.filter(c=>c.source===h.id);
     for(const [title,items,isIncoming] of [['Outgoing',outgoing,false],['Incoming',incoming,true]]){
       const s=section(`${title} communications (${items.length})`,panel);
-      if(!items.length)s.append(el('p','caption','No recorded communications.'));
+      if(!items.length)s.append(el('p','caption','None in the current view.'));
       items.forEach(c=>{const d=el('div','comm');d.append(hostLink(isIncoming?c.source:c.target));d.append(el('small','',` · ${c.protocol} ${c.port}${isBidirectional(c)?' · bidirectional':''}${c.description?' — '+c.description:''}`));s.append(d);});
     }
     const connected=new Set([h.id]);const related=new Set();
@@ -484,7 +527,13 @@ function autoLayout(){
 }
 function wire(){
   $('attribute').addEventListener('change',rebuildValues);
-  $('qualityTabBtn').onclick=()=>showQuality(true);$('diagramTabBtn').onclick=()=>showQuality(false);
+  $('qualityTabBtn').onclick=()=>showPanel('quality');$('diagramTabBtn').onclick=()=>showPanel('diagram');$('queryTabBtn').onclick=()=>showPanel('query');
+  $('queryType').onchange=updateQueryPreview;
+  $('queryColumn').onchange=()=>{queryColumns=[...$('queryColumn').selectedOptions].map(o=>o.value);updateQueryPreview();};
+  $('queryAdd').onclick=()=>{queryConditions.push({key:queryKeys().includes('vlan')?'vlan':'name',op:'eq',value:''});renderQueryConditions();updateQueryPreview();};
+  $('queryRun').onclick=runQuery;
+  $('queryReset').onclick=()=>{queryConditions=[];$('queryType').value='';renderQueryConditions();runQuery();};
+  $('queryCsv').onclick=()=>{const cols=queryColumns.length?queryColumns:['id','name','type'];download('network-explorer-query.csv',[cols.map(csvCell).join(','),...queryResults.map(h=>cols.map(k=>csvCell(queryVals(h,k).join('; '))).join(','))].join('\r\n'),'text/csv;charset=utf-8');};
   ['qualityAttribute','qualityType','qualitySite','qualityStatus'].forEach(id=>$(id).addEventListener('change',updateQualityTable));
   $('qualityCsv').onclick=()=>download('network-explorer-data-quality.csv',[['id','name','type','site','missing_required'].map(csvCell).join(','),...qualityRows.map(h=>[h.id,h.name,h.type||'server',safeValues(h,'site').join(';'),missingRequired(h).join(';')].map(csvCell).join(','))].join('\r\n'),'text/csv;charset=utf-8');
   $('exportQualityRules').onclick=()=>download('data-quality-rules.json',JSON.stringify(qualityRules,null,2));

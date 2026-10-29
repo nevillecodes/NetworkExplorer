@@ -1,15 +1,3 @@
-# Network Explorer v12.4 — 5-pixel node snapping
-
-After dragging a node, its position snaps to the nearest 5-unit graph grid intersection. The movement remains smooth while dragging; snapping happens only upon release. The snapped position is saved in the current filtered view and in named layout exports. Programmatic rearrangement and previously saved layouts are not forcibly snapped.
-
----
-
-# Network Explorer v12.2 — Full host communication details
-
-Host Details now lists **all incoming and outgoing communications from the complete dataset**, regardless of current service, attribute, protocol or dependency filtering. The topology itself, visual highlights and edge inspection remain restricted to the active view. Clicking a host name outside the current view opens its details without adding it to the diagram. Array-valued communication endpoints are expanded as usual.
-
----
-
 > **v12.1 layout fix:** Restores full-height diagram canvas after introducing the Data Quality tab.
 
 # Network Explorer v12 — Data quality
@@ -172,10 +160,8 @@ Use **Export saved views JSON** for a portable backup; **Import saved views JSON
 
 **Automatic server grouping now requires identical sets of `gateway` values** as well as the existing communication, service, site and load-balanced cluster criteria. Missing gateway values match only other missing gateway values. The comparison is order-independent; multiple gateway addresses are supported. This prevents servers with different gateway settings being visually merged. Gateway is metadata only: it does **not** create a communication arrow to a router, infer routing behaviour, or add gateway nodes to filtered diagrams. Model those elements as explicit hosts and communications if needed.
 
-### Filtering by host name (v12.3)
+## v13 — Query builder and tabular reports
 
-The **Filter hosts** attribute selector includes **Host name** in addition to host attributes. Choose a host name from the value list and add the condition; it combines with existing service, site, and other attribute filters. Missing-value checks on host names also work. The separate search field remains highlight-only. The topology retains its normal filtering rules, while host details list the complete unfiltered communications. Saved views retain name conditions.
+Choose **Open query builder** from the sidebar. Select an element type and add one or more `WHERE` conditions. All conditions use **AND**. Operators include **Equals / contains value** (exact match on any value of an array), **Does not contain value**, **Text contains**, **Is missing** and **Is present**. The query works over all loaded elements, independent of the diagram's active service filters. Select output columns (Ctrl/Cmd-click for multiple), click **Run query**, and **Export results CSV** as required.
 
-### Mouse-wheel zoom (v12.5)
-
-Increased Cytoscape.js `wheelSensitivity` from `0.22` to `0.32` (approximately 45% more sensitive). Zoom remains centred on the mouse pointer, and minimum/maximum zoom limits are unchanged.
+For example, choose `server` for Element type, then add `vlan = 120` and `gateway = 10.10.20.1` to find servers with VLAN 120 and that gateway. The query preview is **illustrative pseudo-SQL**, not an SQL interpreter. No server or database is required. Query results use the current loaded hosts data; changes to the JSON are picked up when imported or after reload. Missing means absent, null, an empty array, or a blank value.
