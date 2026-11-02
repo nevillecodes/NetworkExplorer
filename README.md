@@ -165,3 +165,9 @@ Use **Export saved views JSON** for a portable backup; **Import saved views JSON
 Choose **Open query builder** from the sidebar. Select an element type and add one or more `WHERE` conditions. All conditions use **AND**. Operators include **Equals / contains value** (exact match on any value of an array), **Does not contain value**, **Text contains**, **Is missing** and **Is present**. The query works over all loaded elements, independent of the diagram's active service filters. Select output columns (Ctrl/Cmd-click for multiple), click **Run query**, and **Export results CSV** as required.
 
 For example, choose `server` for Element type, then add `vlan = 120` and `gateway = 10.10.20.1` to find servers with VLAN 120 and that gateway. The query preview is **illustrative pseudo-SQL**, not an SQL interpreter. No server or database is required. Query results use the current loaded hosts data; changes to the JSON are picked up when imported or after reload. Missing means absent, null, an empty array, or a blank value.
+
+## v13.1 — snap-to-grid and full host communication details
+
+The **Snap dragged nodes to 5-pixel grid** option is enabled by default in Simplify diagram. It rounds a node's coordinates to the nearest five Cytoscape diagram units when dragging ends. Auto-arrange is unaffected. The preference is saved in named views; existing named views without the setting use the default enabled state.
+
+When you select a host, **Host details** now lists **all** incoming and outgoing communications from the loaded JSON, including expanded array-based source/target combinations, irrespective of the diagram's active service, protocol, or direction filters. Diagram highlighting still only highlights edges currently visible, so the filtered visualisation remains unchanged.

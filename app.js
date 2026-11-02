@@ -6,7 +6,7 @@ let visibleIds = new Set(), matchedIds = new Set(), visibleComms = [];
 let displayGroups = new Map(), displayEdges = new Map(), expandedGroups = new Set();
 const stored = { positions: {}, layouts: {}, namedViews: {} };
 let activeViewKey = null;
-const VIEW_SETTING_IDS = ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships'];
+const VIEW_SETTING_IDS = ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships','snapToGrid'];
 function viewSettings() {
   return Object.fromEntries(VIEW_SETTING_IDS.map(id => [id, $(id).type === 'checkbox' ? $(id).checked : $(id).value]));
 }
@@ -300,7 +300,7 @@ function buildGraph() {
   });
   cy.on('tap','edge',e => {selectedEdgeId=e.target.id();selectedId=null;inspect();});
   cy.on('tap',e => {if(e.target===cy){selectedId=null;selectedEdgeId=null;inspect();}});
-  cy.on('dragfree','node', savePositions);
+  cy.on('dragfree','node', e => { snapPosition(e.target); savePositions(); });
 }
 // Structural equivalence is computed from the complete dataset, not the current filter.
 // A signature retains direction, protocol, port, exact remote endpoint, site, gateway, and complete cluster membership.
@@ -388,6 +388,13 @@ function drawGraph(visibleRel, retainPrior = true) {
   });
 }
 function savePositions(){capturePositions();}
+function snapPosition(node) {
+  if (!$('snapToGrid').checked) return;
+  const grid = 5;
+  const pos = node.position();
+  node.position({x:Math.round(pos.x / grid) * grid, y:Math.round(pos.y / grid) * grid});
+}
+
 function refresh() {
   if (!cy) return;
   const nextKey=viewKey();
@@ -477,11 +484,11 @@ function inspect() {
       (Array.isArray(val)?val:[val]).forEach(v=>line.append(el('span','value',v)));
       attrs.append(line);
     });
-    const incoming=visibleComms.filter(c=>c.target===h.id);
-    const outgoing=visibleComms.filter(c=>c.source===h.id);
+    const incoming=communications.filter(c=>c.target===h.id);
+    const outgoing=communications.filter(c=>c.source===h.id);
     for(const [title,items,isIncoming] of [['Outgoing',outgoing,false],['Incoming',incoming,true]]){
-      const s=section(`${title} communications (${items.length})`,panel);
-      if(!items.length)s.append(el('p','caption','None in the current view.'));
+      const s=section(`${title} communications (${items.length}) · all recorded`,panel);
+      if(!items.length)s.append(el('p','caption','No recorded communications.'));
       items.forEach(c=>{const d=el('div','comm');d.append(hostLink(isIncoming?c.source:c.target));d.append(el('small','',` · ${c.protocol} ${c.port}${isBidirectional(c)?' · bidirectional':''}${c.description?' — '+c.description:''}`));s.append(d);});
     }
     const connected=new Set([h.id]);const related=new Set();
