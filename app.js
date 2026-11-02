@@ -103,12 +103,12 @@ function updateQualityTable(){
 }
 function showPanel(mode){
   qualityMode=mode==='quality';queryMode=mode==='query';
-  $('diagramPanel').hidden=mode!=='diagram';$('qualityPanel').hidden=!qualityMode;$('queryPanel').hidden=!queryMode;
-  for(const [id,tabMode] of [['diagramTabBtn','diagram'],['queryTabBtn','query'],['qualityTabBtn','quality']]){const tab=$(id);tab.classList.toggle('active',mode===tabMode);tab.setAttribute('aria-selected',String(mode===tabMode));tab.tabIndex=mode===tabMode?0:-1;}
+  $('diagramPanel').hidden=mode!=='diagram';$('qualityPanel').hidden=!qualityMode;$('queryPanel').hidden=!queryMode;$('configPanel').hidden=mode!=='config';
+  for(const [id,tabMode] of [['diagramTabBtn','diagram'],['queryTabBtn','query'],['qualityTabBtn','quality'],['configTabBtn','config']]){const tab=$(id);tab.classList.toggle('active',mode===tabMode);tab.setAttribute('aria-selected',String(mode===tabMode));tab.tabIndex=mode===tabMode?0:-1;}
   $('topologySidebar').hidden=mode!=='diagram';
   $('fitBtn').hidden=mode!=='diagram';$('layoutBtn').hidden=mode!=='diagram';
-  document.querySelector('.shell').classList.toggle('reportMode',mode!=='diagram');
-  if(qualityMode)renderQuality();if(queryMode)renderQuery();if(mode==='diagram'&&cy){cy.resize();}
+  document.querySelector('.shell').classList.toggle('reportMode',mode!=='diagram'&&mode!=='config');document.querySelector('.shell').classList.toggle('configMode',mode==='config');
+  if(qualityMode)renderQuality();if(queryMode)renderQuery();if(mode==='config')renderConfig();if(mode==='diagram'&&cy){cy.resize();}
 }
 function showQuality(enabled){showPanel(enabled?'quality':'diagram');}
 const QUERY_OPS=[['eq','Equals / contains value'],['neq','Does not contain value'],['contains','Text contains'],['missing','Is missing'],['present','Is present']];
@@ -227,7 +227,7 @@ async function loadDefaults() {
     if (!response.ok) throw Error(`Could not load ${url} (${response.status})`);
     return response.json();
   }));
-  validateQualityRules(results[3]);qualityRules=results[3];setData(results[0], results[1], results[2], true);
+  validateQualityRules(results[3]);qualityRules=results[3];setData(results[0], results[1], results[2], true);if(!draftDirty)makeDraft();
 }
 function setData(h, c, r, resetFilters = false) {
   validate(h, c, r);
@@ -237,6 +237,7 @@ function setData(h, c, r, resetFilters = false) {
   else filters = filters.filter(f => hosts.some(item => f.value===MISSING_FILTER || safeValues(item, f.key).includes(f.value)));
   rebuildSelectors(); renderChips(); buildGraph(); refresh();renderQuality();renderQuery();
   $('status').textContent = `${hosts.length.toLocaleString()} hosts loaded`;
+  if($('configPanel')&&!$('configPanel').hidden)renderConfig();
 }
 function rebuildSelectors() {
   const current = $('attribute').value;
@@ -534,9 +535,143 @@ function autoLayout(){
   }
   savePositions();
 }
+// v15 local configuration editor. Each edit is staged until explicitly saved.
+let folderHandle = null, draft = null, draftDirty = false, configKind = 'hosts', configSelected = null, configNew = false;
+const clone = x => JSON.parse(JSON.stringify(x));
+function makeDraft(){draft={hosts:clone(hosts),comms:clone(communicationDefinitions),memberships:clone(relationshipDefinitions)};draftDirty=false;configSelected=null;configNew=false;updateDraftState();}
+function updateDraftState(){
+  $('configState').textContent=draftDirty?'Unsaved draft changes':folderHandle?'Folder connected — no changes pending':'Read-only until a folder is connected';
+  $('saveData').disabled=!folderHandle||!draftDirty;
+  $('configState').style.background=draftDirty?'#fff0cb':'#e6edf7';
+}
+function listFor(kind){return draft?.[kind]||[];}
+function configSummary(record){if(configKind==='hosts')return `${record.name} · ${record.type||'server'}`;if(configKind==='comms')return `${[].concat(record.source||[]).join(', ')} → ${[].concat(record.target||[]).join(', ')} · ${record.protocol} ${record.port}`;return `${record.source} → ${[].concat(record.target||[]).join(', ')}`;}
+function renderConfig(){
+ if(!draft)makeDraft();
+ document.querySelectorAll('.configSubtabs button').forEach(b=>b.classList.toggle('active',b.dataset.kind===configKind));
+ const needle=$('configSearch').value.toLowerCase();const list=$('configList');list.replaceChildren();
+ listFor(configKind).filter(r=>JSON.stringify(r).toLowerCase().includes(needle)).forEach(r=>{const b=document.createElement('button');b.className='configItem'+(configSelected===r.id?' active':'');const strong=document.createElement('strong');strong.textContent=r.id;const small=document.createElement('small');small.textContent=configSummary(r);b.append(strong,small);b.onclick=()=>{if(!applyPendingForm())return;configSelected=r.id;configNew=false;renderConfig();};list.append(b);});
+ if(!configSelected&&!configNew&&listFor(configKind).length){configSelected=listFor(configKind)[0].id;}
+ renderConfigFields();updateDraftState();
+}
+function configField(label,value,kind='text'){const wrap=document.createElement('label');wrap.className='configField';wrap.append(document.createTextNode(label));const input=kind==='textarea'?document.createElement('textarea'):document.createElement('input');if(kind!=='textarea')input.type=kind;input.value=value??'';wrap.append(input);return {wrap,input};}
+function selectField(label,value,options){const wrap=document.createElement('label');wrap.className='configField';wrap.append(document.createTextNode(label));const input=document.createElement('select');input.replaceChildren(...options.map(x=>new Option(x,x)));input.value=value;wrap.append(input);return {wrap,input};}
+function renderConfigFields(){
+ const pane=$('configFields');pane.replaceChildren();let record=configNew?null:listFor(configKind).find(r=>r.id===configSelected);
+ $('configEditorTitle').textContent=(configNew?'New ': 'Edit ')+({hosts:'host',comms:'communication',memberships:'membership'}[configKind]);
+ if(!record&&!configNew){$('configEditorTitle').textContent='No records';$('applyRecord').disabled=true;$('duplicateRecord').disabled=true;$('deleteRecord').disabled=true;return;}
+ $('applyRecord').disabled=false;$('duplicateRecord').disabled=configNew;$('deleteRecord').disabled=configNew;
+ if(!record)record=configKind==='hosts'?{id:'',name:'',type:'server',attributes:{}}:configKind==='comms'?{id:'',source:'',target:'',protocol:'TCP',port:443,bidirectional:'no'}:{id:'',source:'',target:[],type:'member'};
+ const put=(key,field)=>{const f=configField(field,record[key]);f.input.dataset.field=key;pane.append(f.wrap);return f.input;};
+ put('id','Unique ID');
+ if(configKind==='hosts'){
+  put('name','Display name');const types=['server','load_balanced_service','user','cloud',...new Set(draft.hosts.map(h=>h.type).filter(Boolean))];let tf=selectField('Type',record.type||'server',[...new Set(types)]);tf.input.dataset.field='type';pane.append(tf.wrap);
+  const h=document.createElement('h4');h.textContent='Attributes (comma-separated values)';pane.append(h);
+  const attrs=document.createElement('div');attrs.id='configAttributes';pane.append(attrs);
+  const add=document.createElement('button');add.textContent='+ Add attribute';add.type='button';add.onclick=()=>addAttributeRow('','');pane.append(add);
+  for(const [k,v] of Object.entries(record.attributes||{}))addAttributeRow(k,Array.isArray(v)?v.join(', '):String(v??''));
+ }else if(configKind==='comms'){
+  put('source','Sources (comma-separated IDs)');put('target','Targets (comma-separated IDs)');const pf=selectField('Protocol',record.protocol,['TCP','UDP']);pf.input.dataset.field='protocol';pane.append(pf.wrap);put('port','Destination port');const bf=selectField('Bidirectional',record.bidirectional||'no',['no','yes']);bf.input.dataset.field='bidirectional';pane.append(bf.wrap);put('description','Description (optional)');
+ }else{
+  const sources=draft.hosts.filter(h=>h.type==='load_balanced_service').map(h=>h.id);const sf=selectField('VIP / cluster',record.source||sources[0]||'',['',...sources]);sf.input.dataset.field='source';pane.append(sf.wrap);
+  put('target','Member IDs (comma-separated)');
+ }
+}
+function addAttributeRow(key,value){const row=document.createElement('div');row.className='configAttrRow';const k=document.createElement('input'),v=document.createElement('input'),del=document.createElement('button');k.placeholder='attribute';v.placeholder='value1, value2';k.value=key;v.value=value;del.type='button';del.textContent='×';del.title='Remove attribute';del.onclick=()=>row.remove();row.append(k,v,del);$('configAttributes').append(row);}
+function fromList(value){const arr=String(value).split(',').map(v=>v.trim()).filter(Boolean);return arr.length===1?arr[0]:arr;}
+function readConfigForm(){
+ const out={};$('configFields').querySelectorAll('[data-field]').forEach(input=>{out[input.dataset.field]=input.value.trim();});
+ if(configKind==='hosts'){
+   out.attributes={};for(const row of $('configAttributes').children){const [keyInput,valueInput]=row.querySelectorAll('input');const key=keyInput.value.trim();if(!key)continue;if(Object.hasOwn(out.attributes,key))throw Error(`Duplicate attribute: ${key}`);
+    let vals=valueInput.value.split(',').map(v=>v.trim()).filter(Boolean);
+    // Preserve existing numeric array conventions for VLAN attributes.
+    if(key==='vlan')vals=vals.map(v=>/^\d+$/.test(v)?Number(v):v);
+    out.attributes[key]=vals;
+   }
+ }else if(configKind==='comms'){
+   out.source=fromList(out.source);out.target=fromList(out.target);out.port=Number(out.port);
+   if(!out.description)delete out.description;
+ }else{out.target=fromList(out.target);out.type='member';}
+ return out;
+}
+function validateDraft(next){validate(next.hosts,next.comms,next.memberships);return true;}
+function applyPendingForm(){
+ if(!$('configFields').querySelector('[data-field]'))return true;
+ // Only apply on explicit Apply; moving selection doesn't silently change records.
+ return true;
+}
+function applyConfigRecord(){
+ try{
+  const entry=readConfigForm();const arr=listFor(configKind);const existingIndex=configNew?-1:arr.findIndex(r=>r.id===configSelected);
+  if(!entry.id|| (configKind==='hosts'&&!entry.name))throw Error('Unique ID and required name cannot be blank.');
+  if(arr.some((r,i)=>r.id===entry.id&&i!==existingIndex))throw Error(`Duplicate ID: ${entry.id}`);
+  if(existingIndex>=0&&configKind==='hosts'&&entry.id!==configSelected)throw Error('Host IDs cannot be renamed because other records may reference them. Duplicate the host instead.');
+  const next=clone(draft);const target=next[configKind];if(existingIndex>=0){target[existingIndex]={...target[existingIndex],...entry};}else target.push(entry);
+  validateDraft(next);draft=next;draftDirty=true;configSelected=entry.id;configNew=false;renderConfig();$('configHint').textContent='Applied to draft. Save changes to write JSON files.';
+ }catch(e){error(`Cannot apply: ${e.message}`);}
+}
+function removeConfigRecord(){
+ const rec=listFor(configKind).find(r=>r.id===configSelected);if(!rec)return;
+ const mentions=configKind==='hosts'?[...draft.comms,...draft.memberships].filter(r=>[].concat(r.source,r.target).includes(rec.id)).length:0;
+ if(!confirm(`Delete ${rec.id}?${mentions?` It is referenced by ${mentions} other records, which must be edited first.`:''}`))return;
+ const next=clone(draft);next[configKind]=next[configKind].filter(r=>r.id!==rec.id);
+ try{validateDraft(next);draft=next;draftDirty=true;configSelected=null;renderConfig();}catch(e){error(`Cannot delete: ${e.message}`);}
+}
+async function connectConfigFolder(){
+ if(typeof window.showDirectoryPicker!=='function'){error('This Chrome version does not support folder editing. Use Chrome on localhost or HTTPS.');return;}
+ if(draftDirty&&!confirm('Connect a different folder? Your unsaved draft will be discarded.'))return;
+ try{
+  const dir=await window.showDirectoryPicker({mode:'readwrite',id:'network-explorer-data'});
+  const names=['hosts.json','communications.json','relationships.json'];const data=[];
+  for(const name of names){const file=await (await dir.getFileHandle(name)).getFile();data.push(JSON.parse(await file.text()));}
+  validate(...data);
+  folderHandle=dir;setData(data[0],data[1],data[2],false);makeDraft();renderConfig();$('configFolderStatus').textContent=`Connected: ${dir.name}/ — data loaded`;
+ }catch(e){if(e.name!=='AbortError')error(`Folder connection failed: ${e.message}`);}
+}
+async function saveConfigDraft(){
+ if(!folderHandle)return error('Connect the data folder first.');
+ try{
+  validateDraft(draft);
+  const permission=await folderHandle.queryPermission({mode:'readwrite'});
+  if(permission!=='granted'&&await folderHandle.requestPermission({mode:'readwrite'})!=='granted')throw Error('Write permission denied.');
+  // Check for external modifications before overwriting, using the snapshot loaded when editing began.
+  const names=['hosts.json','communications.json','relationships.json'];const original=[hosts,communicationDefinitions,relationshipDefinitions];
+  for(let i=0;i<names.length;i++){
+    const remote=JSON.parse(await (await (await folderHandle.getFileHandle(names[i])).getFile()).text());
+    if(JSON.stringify(remote)!==JSON.stringify(original[i]))throw Error(`${names[i]} has changed on disk. Reconnect the folder to reload it before saving.`);
+  }
+  const next=[draft.hosts,draft.comms,draft.memberships];
+  // Write only files changed by the draft, leaving untouched files intact.
+  for(let i=0;i<names.length;i++){
+    if(JSON.stringify(next[i])===JSON.stringify(original[i]))continue;
+    // Keep a recoverable copy of the previous JSON before overwriting.
+    const backup=await folderHandle.getFileHandle(names[i]+'.bak',{create:true});
+    const backupWriter=await backup.createWritable();
+    await backupWriter.write(JSON.stringify(original[i],null,2)+'\n');await backupWriter.close();
+    const handle=await folderHandle.getFileHandle(names[i]);const writable=await handle.createWritable();
+    await writable.write(JSON.stringify(next[i],null,2)+'\n');await writable.close();
+  }
+  setData(clone(draft.hosts),clone(draft.comms),clone(draft.memberships),false);makeDraft();renderConfig();$('configHint').textContent='Saved successfully to the connected data folder.';
+ }catch(e){error(`Save failed: ${e.message}. Inspect files if the write was interrupted.`);}
+}
+function wireConfiguration(){
+ makeDraft();
+ $('connectFolder').onclick=connectConfigFolder;
+ document.querySelectorAll('.configSubtabs button').forEach(button=>button.onclick=()=>{configKind=button.dataset.kind;configSelected=null;configNew=false;$('configSearch').value='';renderConfig();});
+ $('configSearch').oninput=renderConfig;
+ $('configAdd').onclick=()=>{configSelected=null;configNew=true;renderConfig();};
+ $('applyRecord').onclick=applyConfigRecord;
+ $('duplicateRecord').onclick=()=>{const orig=listFor(configKind).find(r=>r.id===configSelected);if(!orig)return;configNew=true;configSelected=null;renderConfigFields();const fields=$('configFields').querySelectorAll('[data-field]');fields.forEach(f=>{if(f.dataset.field==='id')f.value=orig.id+'-copy';else if(f.dataset.field==='source'||f.dataset.field==='target')f.value=[].concat(orig[f.dataset.field]).join(', ');else f.value=orig[f.dataset.field]??'';});if(configKind==='hosts'){const attr=$('configAttributes');attr.replaceChildren();for(const [k,v] of Object.entries(orig.attributes))addAttributeRow(k,[].concat(v).join(', '));}};
+ $('deleteRecord').onclick=removeConfigRecord;
+ $('discardDraft').onclick=()=>{if(draftDirty&&!confirm('Discard all unsaved draft changes?'))return;makeDraft();renderConfig();};
+ $('saveData').onclick=saveConfigDraft;
+ window.addEventListener('beforeunload',event=>{if(draftDirty){event.preventDefault();event.returnValue='';}});
+}
+
 function wire(){
+  wireConfiguration();
   $('attribute').addEventListener('change',rebuildValues);
-  $('qualityTabBtn').onclick=()=>showPanel('quality');$('diagramTabBtn').onclick=()=>showPanel('diagram');$('queryTabBtn').onclick=()=>showPanel('query');
+  $('configTabBtn').onclick=()=>showPanel('config');$('qualityTabBtn').onclick=()=>showPanel('quality');$('diagramTabBtn').onclick=()=>showPanel('diagram');$('queryTabBtn').onclick=()=>showPanel('query');
   $('queryType').onchange=updateQueryPreview;
   $('queryColumn').onchange=()=>{queryColumns=[...$('queryColumn').selectedOptions].map(o=>o.value);updateQueryPreview();};
   $('queryAdd').onclick=()=>{queryConditions.push({key:queryKeys().includes('vlan')?'vlan':'name',op:'eq',value:''});renderQueryConditions();updateQueryPreview();};

@@ -179,3 +179,18 @@ For example, choose `server` for Element type, then add `vlan = 120` and `gatewa
 The **Snap dragged nodes to 5-pixel grid** option is enabled by default in Simplify diagram. It rounds a node's coordinates to the nearest five Cytoscape diagram units when dragging ends. Auto-arrange is unaffected. The preference is saved in named views; existing named views without the setting use the default enabled state.
 
 When you select a host, **Host details** now lists **all** incoming and outgoing communications from the loaded JSON, including expanded array-based source/target combinations, irrespective of the diagram's active service, protocol, or direction filters. Diagram highlighting still only highlights edges currently visible, so the filtered visualisation remains unchanged.
+
+## v15: Configuration tab (Chrome)
+
+The **Configuration** tab edits Hosts, Communications and Memberships without hand-editing JSON. Continue to run the project at `http://localhost:4321` using `python -m http.server 4321` and open in a recent version of Chrome.
+
+1. Click **Connect data folder** and choose the `network-explorer/data` folder (not the parent folder). Grant read/write access. This loads and validates the current files.
+2. Choose **Hosts**, **Communications**, or **Memberships**. Select a record, edit the fields, and click **Apply to draft**. You can add, duplicate or delete records; deletions of referenced hosts are rejected.
+3. Click **Validate & save changes**. The app validates the entire set of records, checks for outside changes to the JSON files, creates `.bak` copies for each changed JSON file and writes only the changed files.
+4. The topology, reports and queries are refreshed after a successful save.
+
+**Important:** No file is modified until you click **Validate & save changes**. Chrome must permit folder access, which is supported on localhost or HTTPS. Saving may require re-authorisation after restarting Chrome. The editor leaves `data-quality-rules.json` unchanged. If a save fails partway through, check the `.bak` files; multi-file writes are not atomic. The browser will warn before navigating away with an unsaved draft.
+
+Attribute values are entered as comma-separated lists. The `vlan` field converts numeric entries to numbers; other new fields are saved as arrays of strings. Communications support comma-separated source and target IDs, interpreted as all source–target combinations. Membership targets also support multiple IDs.
+
+Host IDs are immutable in the editor because they can be referenced by relationships and communications. To change one, make a new host and update its references first.

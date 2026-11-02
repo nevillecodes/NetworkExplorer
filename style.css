@@ -49,3 +49,17 @@
 #diagramPanel,#queryPanel,#qualityPanel{min-height:0;flex:1 1 auto;}
 @media(max-width:1050px){.shell.reportMode{grid-template-columns:minmax(0,1fr)}.shell.reportMode .details{grid-column:1;grid-row:2;}}
 @media(max-width:650px){.shell.reportMode{display:block}.viewTabs{padding-left:6px}.viewTabs button{padding:11px 12px}.shell.reportMode .centre{height:auto;min-height:65vh}.shell.reportMode #queryPanel,.shell.reportMode #qualityPanel{min-height:65vh}}
+
+/* v15 configuration editor */
+#configPanel{padding:22px;overflow:auto;min-height:0;flex:1;background:#f7f9fc}
+.configHeader{display:flex;justify-content:space-between;align-items:start;gap:14px}.configHeader h2{margin:0}.configStatus{border-radius:8px;background:#e6edf7;color:#365675;padding:7px 10px;font-size:12px}
+.configToolbar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;background:white;border:1px solid #dee6ef;padding:12px;border-radius:10px;margin:12px 0}
+.configWorkspace{display:grid;grid-template-columns:minmax(220px,35%) minmax(0,1fr);gap:14px;min-height:440px}.configListPane,.configEditor{padding:15px;background:white;border:1px solid #dee6ef;border-radius:10px;min-width:0}
+.configSubtabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px}.configSubtabs button{padding:8px}.configSubtabs button.active{background:#e3eefc;border-color:#85acd9;color:#154d86}
+#configSearch{width:100%;padding:9px;border:1px solid #cbd7e5;border-radius:8px}.configList{height:42vh;min-height:240px;overflow:auto;margin-top:10px}
+.configItem{display:block;width:100%;text-align:left;margin:4px 0;padding:10px;border:1px solid transparent;background:#f8fafc}.configItem.active{background:#e5effb;border-color:#86b2e0}.configItem small{display:block;color:#687a8e}
+.configEditor h3{margin:4px 0 15px}.configField{display:flex;flex-direction:column;margin:11px 0;gap:5px;font-size:12px;font-weight:650}.configField input,.configField select,.configField textarea{padding:9px;width:100%;background:white;border:1px solid #cbd7e5;border-radius:8px;color:#20314b}.configField textarea{min-height:70px}.configField select[multiple]{min-height:100px}
+.configAttrRow{display:grid;grid-template-columns:minmax(85px,35%) minmax(100px,1fr) auto;gap:7px;margin:7px 0}.configAttrRow input{padding:9px;width:100%;border:1px solid #cbd7e5;border-radius:7px;min-width:0}.configAttrRow button{padding:7px 11px}
+.configButtons{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.danger{color:#9e3737;border-color:#e4b9b9}.configHeader .help{max-width:620px}
+.shell.configMode{grid-template-columns:minmax(0,1fr)}.shell.configMode .details{display:none}.shell.configMode .centre{min-width:0}
+@media(max-width:750px){.configWorkspace{grid-template-columns:1fr}.configList{height:180px;min-height:0}}
