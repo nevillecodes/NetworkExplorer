@@ -38,3 +38,14 @@
 .queryTableWrap{overflow:auto;max-height:55vh;border:1px solid #dae3ec;border-radius:8px}
 .queryTableWrap .qualityTable{min-width:500px;white-space:nowrap}
 @media(max-width:700px){.queryCondition{grid-template-columns:1fr 1fr}.queryToolbar{grid-template-columns:1fr}}
+
+/* v14 primary navigation: tabs rather than sidebar screen switches */
+.viewTabs{display:flex;gap:4px;align-items:end;padding:8px 14px 0;background:#fff;border-bottom:1px solid #dce5ef;flex:0 0 auto;overflow-x:auto;}
+.viewTabs button{border:1px solid transparent;border-radius:8px 8px 0 0;background:transparent;color:#536985;font-weight:650;padding:12px 17px;white-space:nowrap;}
+.viewTabs button:hover{background:#f0f5fb;}
+.viewTabs button.active{background:#f7f9fc;color:#174e98;border-color:#dce5ef;border-bottom-color:#f7f9fc;}
+.centre{min-height:0;}
+.shell.reportMode{grid-template-columns:minmax(0,1fr) 290px;}
+#diagramPanel,#queryPanel,#qualityPanel{min-height:0;flex:1 1 auto;}
+@media(max-width:1050px){.shell.reportMode{grid-template-columns:minmax(0,1fr)}.shell.reportMode .details{grid-column:1;grid-row:2;}}
+@media(max-width:650px){.shell.reportMode{display:block}.viewTabs{padding-left:6px}.viewTabs button{padding:11px 12px}.shell.reportMode .centre{height:auto;min-height:65vh}.shell.reportMode #queryPanel,.shell.reportMode #qualityPanel{min-height:65vh}}

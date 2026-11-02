@@ -1,3 +1,11 @@
+## v14 interface updates
+
+- Top-level **Topology**, **Query Builder** and **Data Quality** tabs replace the sidebar navigation sections.
+- The Topology sidebar is shown only in the Topology tab.
+- Removed the Data sidebar section (hosts, communications and relationships import/export and sample reset). Data is loaded from the `data/` folder on startup.
+- Removed data-quality rules import/export controls. Edit `data/data-quality-rules.json` directly and refresh the browser.
+- Preserved named saved-view import/export controls for portable layouts, and CSV report export in Query Builder and Data Quality.
+
 > **v12.1 layout fix:** Restores full-height diagram canvas after introducing the Data Quality tab.
 
 # Network Explorer v12 — Data quality

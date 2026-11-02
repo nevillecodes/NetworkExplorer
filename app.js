@@ -104,8 +104,10 @@ function updateQualityTable(){
 function showPanel(mode){
   qualityMode=mode==='quality';queryMode=mode==='query';
   $('diagramPanel').hidden=mode!=='diagram';$('qualityPanel').hidden=!qualityMode;$('queryPanel').hidden=!queryMode;
-  $('qualityTabBtn').hidden=qualityMode;$('queryTabBtn').hidden=queryMode;$('diagramTabBtn').hidden=mode==='diagram';
-  $('diagramTabBtn').textContent='Return to diagram';
+  for(const [id,tabMode] of [['diagramTabBtn','diagram'],['queryTabBtn','query'],['qualityTabBtn','quality']]){const tab=$(id);tab.classList.toggle('active',mode===tabMode);tab.setAttribute('aria-selected',String(mode===tabMode));tab.tabIndex=mode===tabMode?0:-1;}
+  $('topologySidebar').hidden=mode!=='diagram';
+  $('fitBtn').hidden=mode!=='diagram';$('layoutBtn').hidden=mode!=='diagram';
+  document.querySelector('.shell').classList.toggle('reportMode',mode!=='diagram');
   if(qualityMode)renderQuality();if(queryMode)renderQuery();if(mode==='diagram'&&cy){cy.resize();}
 }
 function showQuality(enabled){showPanel(enabled?'quality':'diagram');}
@@ -543,8 +545,6 @@ function wire(){
   $('queryCsv').onclick=()=>{const cols=queryColumns.length?queryColumns:['id','name','type'];download('network-explorer-query.csv',[cols.map(csvCell).join(','),...queryResults.map(h=>cols.map(k=>csvCell(queryVals(h,k).join('; '))).join(','))].join('\r\n'),'text/csv;charset=utf-8');};
   ['qualityAttribute','qualityType','qualitySite','qualityStatus'].forEach(id=>$(id).addEventListener('change',updateQualityTable));
   $('qualityCsv').onclick=()=>download('network-explorer-data-quality.csv',[['id','name','type','site','missing_required'].map(csvCell).join(','),...qualityRows.map(h=>[h.id,h.name,h.type||'server',safeValues(h,'site').join(';'),missingRequired(h).join(';')].map(csvCell).join(','))].join('\r\n'),'text/csv;charset=utf-8');
-  $('exportQualityRules').onclick=()=>download('data-quality-rules.json',JSON.stringify(qualityRules,null,2));
-  $('importQualityRules').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const r=JSON.parse(await f.text());validateQualityRules(r);qualityRules=r;rebuildSelectors();renderQuality();error('Quality rules imported successfully.');}catch(ex){error(`Quality rules import failed: ${ex.message}`);}};
   $('addFilter').onclick=()=>{const key=$('attribute').value,value=$('value').value;if(!key||value==null)return;if(!filters.some(f=>f.key===key&&f.value===value))filters.push({key,value});renderChips();refresh();};
   $('clearFilters').onclick=()=>{filters=[];renderChips();refresh();};
   ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships'].forEach(id=>$(id).addEventListener('change',refresh));
@@ -576,13 +576,6 @@ function wire(){
       Object.assign(stored.namedViews,imports);persistLayouts();renderSavedViews();$('layoutInfo').textContent=`Imported ${data.views.length} views. Choose one and click Load view.`;
     }catch(ex){error(`View import failed: ${ex.message}`);}
   });
-  $('importHosts').addEventListener('change',e=>{importFile(e.target.files[0],'hosts');e.target.value='';});
-  $('importComms').addEventListener('change',e=>{importFile(e.target.files[0],'comms');e.target.value='';});
-  $('exportHosts').onclick=()=>download('hosts.json',JSON.stringify(hosts,null,2));
-  $('exportComms').onclick=()=>download('communications.json',JSON.stringify(communicationDefinitions,null,2));
-  $('importRelationships').addEventListener('change',e=>{importFile(e.target.files[0],'relationships');e.target.value='';});
-  $('exportRelationships').onclick=()=>download('relationships.json',JSON.stringify(relationshipDefinitions,null,2));
-  $('resetData').onclick=()=>loadDefaults().catch(e=>error(e.message));
   window.addEventListener('keydown',e=>{if(e.key==='Escape'){selectedId=null;selectedEdgeId=null;inspect();}});
 }
 async function main(){
