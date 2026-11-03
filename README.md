@@ -201,3 +201,11 @@ Host IDs are immutable in the editor because they can be referenced by relations
 In **Topology → Relationships**, leave **Include directly connected hosts** enabled and choose **All connected hosts**, **Only selected hosts**, or **All except selected hosts**. For the latter two modes, use the searchable checkbox list to choose the relevant adjacent hosts. Service-matched elements are never removed by this setting. Only real communications involving visible endpoints remain in the diagram; no synthetic edges are added.
 
 Selections are scoped to the active attribute filter, protocol and dependency direction; changing services does not apply the previous service's host selections. Saved views now include their neighbour selection, and imported older views remain compatible. The original JSON data and local Configuration editor are unchanged.
+
+
+## v16.1 — topology navigation
+
+- Mouse-wheel zoom is faster and adjustable using the **Navigation → Mouse-wheel zoom speed** dropdown. Small continuous trackpad movements are treated more gently; Ctrl+wheel pinch remains with Cytoscape's built-in handling.
+- Hold the **right mouse button** over the diagram and drag **up to zoom in**, **down to zoom out**. Zoom stays anchored to the point where the drag began. The browser context menu is disabled inside the diagram canvas only.
+- Topology toolbar buttons: **+**, **−**, **100%** (zoom reset) and **Fit**. Double-clicking the empty diagram background fits visible nodes.
+- Zoom affects only the viewport; node coordinates, snapping and saved layout positions remain unchanged.

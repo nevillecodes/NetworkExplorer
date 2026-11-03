@@ -66,3 +66,10 @@
 
 /* v16 selective direct neighbour inclusion / omission */
 .neighborControls{padding:8px 0 4px}.neighborControls select{width:100%}.neighborControls .help{margin:8px 0}.neighborButtons{margin:9px 0}.neighborButtons button{font-size:11px;padding:7px 6px}.neighborList{max-height:265px;overflow:auto;border:1px solid #d9e4ee;border-radius:8px;background:#f8fbff}.neighborItem{display:flex;align-items:flex-start;gap:9px;border-bottom:1px solid #e9eef5;padding:8px 9px;cursor:pointer;font-size:12px}.neighborItem:last-child{border:0}.neighborItem:hover{background:#eef5ff}.neighborItem input{margin:3px 0 0;accent-color:#2463bd;flex:none}.neighborItem span{min-width:0;overflow-wrap:anywhere}.neighborItem strong{display:block;color:#263e5b}.neighborItem small{display:block;color:#6d7e91;margin-top:3px;font-size:10px}#neighborPicker[hidden],#neighborControls[hidden]{display:none}
+
+/* v16.1 — independent topology zoom controls */
+.zoomToolbar{margin-left:auto;display:flex;gap:4px;align-items:center;white-space:nowrap}
+.zoomToolbar button{min-width:30px;padding:5px 8px;border-radius:6px;font-weight:700;font-size:12px}
+.zoomToolbar output{display:inline-block;text-align:center;min-width:48px;font-variant-numeric:tabular-nums;color:#536985;font-size:11px}
+#cy.rightZoomActive{cursor:ns-resize!important;user-select:none}
+@media(max-width:850px){.metrics{gap:8px}.zoomToolbar{margin-left:0}.metrics .metricnote{display:none}}

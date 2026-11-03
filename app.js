@@ -362,6 +362,9 @@ function buildGraph() {
   cy.on('tap','edge',e => {selectedEdgeId=e.target.id();selectedId=null;inspect();});
   cy.on('tap',e => {if(e.target===cy){selectedId=null;selectedEdgeId=null;inspect();}});
   cy.on('dragfree','node', e => { snapPosition(e.target); savePositions(); });
+  cy.on('zoom', updateZoomDisplay);
+  cy.on('dbltap', e => { if(e.target===cy) fitTopology(); });
+  updateZoomDisplay();
 }
 // Structural equivalence is computed from the complete dataset, not the current filter.
 // A signature retains direction, protocol, port, exact remote endpoint, site, gateway, and complete cluster membership.
@@ -735,7 +738,70 @@ function wireConfiguration(){
  window.addEventListener('beforeunload',event=>{if(draftDirty){event.preventDefault();event.returnValue='';}});
 }
 
+// Navigation enhancements: rendered-position anchors keep zoom stable under the pointer.
+function updateZoomDisplay(){
+  if(cy && $('zoomLevel')) $('zoomLevel').textContent = `${Math.round(cy.zoom()*100)}%`;
+}
+function zoomAt(factor, renderedPosition){
+  if(!cy || !$('diagramPanel') || $('diagramPanel').hidden) return;
+  const next=Math.max(cy.minZoom(),Math.min(cy.maxZoom(),cy.zoom()*factor));
+  if(Math.abs(next-cy.zoom())<1e-9)return;
+  cy.zoom({level:next,renderedPosition:renderedPosition||{x:cy.width()/2,y:cy.height()/2}});
+}
+function fitTopology(){
+  if(cy && cy.nodes(':visible').length)cy.fit(cy.elements(':visible'),55);
+}
+function setupZoomNavigation(){
+  const canvas=$('cy');
+  // Native Cytoscape handling remains enabled for Ctrl+wheel trackpad pinch.
+  canvas.addEventListener('wheel',e=>{
+    if(!cy || $('diagramPanel').hidden || e.ctrlKey)return;
+    e.preventDefault();e.stopImmediatePropagation();
+    const size=e.deltaMode===1?16:e.deltaMode===2?canvas.clientHeight:1;
+    const dy=e.deltaY*size;
+    if(!dy)return;
+    // Classic wheel notches tend to be large/discrete; trackpad gestures small and continuous.
+    const notch=e.deltaMode!==0 || Math.abs(e.deltaY)>=70;
+    const speed=Number($('wheelSpeed').value)||2;
+    const intensity=notch?(0.0028+speed*0.0017):(0.00135+speed*0.00018);
+    const factor=Math.exp(Math.max(-1.25,Math.min(1.25,-dy*intensity)));
+    const bounds=canvas.getBoundingClientRect();
+    zoomAt(factor,{x:e.clientX-bounds.left,y:e.clientY-bounds.top});
+  },{passive:false,capture:true});
+  // Chrome opens its context menu on right-click unless suppressed on the canvas.
+  // Right-clicks outside the canvas retain the browser's normal context menu.
+  canvas.addEventListener('contextmenu',e=>e.preventDefault());
+  let drag=null;
+  canvas.addEventListener('pointerdown',e=>{
+    if(e.button!==2 || !cy || $('diagramPanel').hidden)return;
+    e.preventDefault();e.stopPropagation();
+    const bounds=canvas.getBoundingClientRect();
+    drag={id:e.pointerId,lastY:e.clientY,point:{x:e.clientX-bounds.left,y:e.clientY-bounds.top}};
+    canvas.classList.add('rightZoomActive');
+    try{canvas.setPointerCapture(e.pointerId);}catch(_e){}
+  },true);
+  canvas.addEventListener('pointermove',e=>{
+    if(!drag||drag.id!==e.pointerId)return;
+    e.preventDefault();e.stopPropagation();
+    const dy=e.clientY-drag.lastY;drag.lastY=e.clientY;
+    if(dy)zoomAt(Math.exp(Math.max(-0.7,Math.min(0.7,-dy*0.012))),drag.point);
+  },true);
+  const finish=e=>{
+    if(!drag||(e.pointerId!==undefined&&drag.id!==e.pointerId))return;
+    drag=null;canvas.classList.remove('rightZoomActive');
+    try{if(canvas.hasPointerCapture(e.pointerId))canvas.releasePointerCapture(e.pointerId);}catch(_e){}
+    if(e.type==='pointerup'){e.preventDefault();e.stopPropagation();}
+  };
+  canvas.addEventListener('pointerup',finish,true);
+  canvas.addEventListener('pointercancel',finish,true);
+  canvas.addEventListener('lostpointercapture',finish,true);
+  $('zoomInBtn').onclick=()=>zoomAt(1.3);
+  $('zoomOutBtn').onclick=()=>zoomAt(1/1.3);
+  $('zoomResetBtn').onclick=()=>{if(!cy)return;cy.zoom({level:1,renderedPosition:{x:cy.width()/2,y:cy.height()/2}});};
+  $('zoomFitBtn').onclick=fitTopology;
+}
 function wire(){
+  setupZoomNavigation();
   wireConfiguration();
   $('attribute').addEventListener('change',rebuildValues);
   $('configTabBtn').onclick=()=>showPanel('config');$('qualityTabBtn').onclick=()=>showPanel('quality');$('diagramTabBtn').onclick=()=>showPanel('diagram');$('queryTabBtn').onclick=()=>showPanel('query');
@@ -757,7 +823,7 @@ function wire(){
   $('neighborSelectNone').onclick=()=>{const choice=currentNeighborChoices(),set=$('neighborMode').value==='only'?choice.include:choice.exclude;set.clear();carryPositionsIntoNewView();refresh();};
   $('expandReset').onclick=()=>{expandedGroups.clear();selectedId=null;selectedEdgeId=null;refresh();};
   $('unselect').onclick=()=>{selectedId=null;selectedEdgeId=null;inspect();};
-  $('fitBtn').onclick=()=>{if(cy.nodes(':visible').length)cy.fit(cy.elements(':visible'),55);};
+  $('fitBtn').onclick=fitTopology;
   $('layoutBtn').onclick=autoLayout;
   $('saveView').onclick=()=>{
     const name=$('viewName').value.trim();if(!name){error('Enter a view name first.');return;}
