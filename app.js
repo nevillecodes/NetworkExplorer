@@ -1,19 +1,74 @@
 'use strict';
-// Network Explorer: plain JavaScript, Cytoscape.js, and three JSON files.
+// Network Explorer v16: plain JavaScript, Cytoscape.js, and local JSON data.
 const $ = id => document.getElementById(id);
 let hosts = [], communications = [], communicationDefinitions = [], relationships = [], relationshipDefinitions = [], cy, filters = [], selectedId = null, selectedEdgeId = null;
 let visibleIds = new Set(), matchedIds = new Set(), visibleComms = [];
 let displayGroups = new Map(), displayEdges = new Map(), expandedGroups = new Set();
 const stored = { positions: {}, layouts: {}, namedViews: {} };
 let activeViewKey = null;
-const VIEW_SETTING_IDS = ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships','snapToGrid'];
+const VIEW_SETTING_IDS = ['neighborMode','neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships','snapToGrid'];
 function viewSettings() {
   return Object.fromEntries(VIEW_SETTING_IDS.map(id => [id, $(id).type === 'checkbox' ? $(id).checked : $(id).value]));
+}
+// Per-filter choices are separate so a selection for one service cannot leak into another.
+const neighborChoices = new Map();
+function neighborScope(){
+  return JSON.stringify({filters:filters.map(f=>[f.key,f.value]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b))),protocol:$('protocol').value,direction:$('direction').value});
+}
+function currentNeighborChoices(){
+  const key=neighborScope();
+  if(!neighborChoices.has(key))neighborChoices.set(key,{include:new Set(),exclude:new Set()});
+  return neighborChoices.get(key);
+}
+function neighborCandidates(){
+  const matched=new Set(hosts.filter(h=>filters.every(f=>matchesCondition(h,f))).map(h=>h.id));
+  const protocol=$('protocol').value,dir=$('direction').value;
+  const ids=new Set();
+  communications.forEach(c=>{
+    if(protocol!=='all'&&protocol!==c.protocol)return;
+    if(dir!=='incoming'&&matched.has(c.source)&&!matched.has(c.target))ids.add(c.target);
+    if(dir!=='outgoing'&&matched.has(c.target)&&!matched.has(c.source))ids.add(c.source);
+  });
+  return hosts.filter(h=>ids.has(h.id)).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+}
+function carryPositionsIntoNewView(){
+  if(!cy)return;
+  const key=viewKey();
+  if(!stored.layouts[key]){
+    const positions={};cy.nodes().forEach(n=>{const p=n.position();if(Number.isFinite(p.x)&&Number.isFinite(p.y))positions[n.id()]={x:p.x,y:p.y};});
+    if(Object.keys(positions).length)stored.layouts[key]=positions;
+  }
+}
+function renderNeighborPicker(){
+  const list=$('neighborList'),search=$('neighborSearch').value.trim().toLowerCase();
+  const candidates=neighborCandidates(),choice=currentNeighborChoices(),mode=$('neighborMode').value;
+  $('neighborControls').hidden=!$('neighbours').checked;
+  $('neighborPicker').hidden=!$('neighbours').checked||!['only','except'].includes(mode);
+  const candidateIds=new Set(candidates.map(h=>h.id));
+  const picked=mode==='only'?choice.include:choice.exclude;
+  $('neighborSummary').textContent=`${candidates.length} directly connected hosts · ${mode==='only'?candidates.filter(h=>picked.has(h.id)).length+' selected':mode==='except'?candidates.filter(h=>picked.has(h.id)).length+' excluded':mode==='all'?'all included':'none included'}`;
+  list.replaceChildren();
+  const matching=candidates.filter(h=>[h.name,h.id,...Object.values(h.attributes||{}).flat()].join(' ').toLowerCase().includes(search));
+  const fragment=document.createDocumentFragment();
+  matching.forEach(h=>{
+    const label=document.createElement('label');label.className='neighborItem';
+    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=picked.has(h.id);
+    checkbox.setAttribute('aria-label',`${mode==='only'?'Include':'Exclude'} ${h.name}`);
+    checkbox.onchange=()=>{if(checkbox.checked)picked.add(h.id);else picked.delete(h.id);carryPositionsIntoNewView();refresh();};
+    const info=document.createElement('span');
+    const title=document.createElement('strong');title.textContent=h.name;
+    const sub=document.createElement('small');sub.textContent=`${safeValues(h,'site').join(', ')||'No site'} · ${h.type||'server'} · ${h.id}`;
+    info.append(title,sub);label.append(checkbox,info);fragment.append(label);
+  });
+  list.append(fragment);
+  if(!matching.length){const p=document.createElement('p');p.className='help';p.textContent=candidates.length?'No connected hosts match your search.':'No additional directly connected hosts for these conditions.';list.append(p);}
 }
 function viewKey() {
   const conditions = filters.map(f=>[f.key,f.value]).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)));
   const opts = viewSettings(); delete opts.portLabels;
-  return JSON.stringify({conditions, opts, expanded:[...expandedGroups].sort(), isolated:opts.clusterMode==='isolated'?selectedId:null});
+  const choice=currentNeighborChoices();
+  const selection=opts.neighbours&&opts.neighborMode==='only'?[...choice.include].sort():opts.neighbours&&opts.neighborMode==='except'?[...choice.exclude].sort():[];
+  return JSON.stringify({conditions, opts, selection, expanded:[...expandedGroups].sort(), isolated:opts.clusterMode==='isolated'?selectedId:null});
 }
 function persistLayouts(){
   try { localStorage.setItem('networkExplorerLayoutsV10', JSON.stringify({layouts:stored.layouts,namedViews:stored.namedViews})); }
@@ -26,7 +81,7 @@ function capturePositions(key=activeViewKey) {
 }
 function currentSnapshot(name) {
   capturePositions();
-  return {name, filters:filters.map(f=>({...f})), settings:viewSettings(), expandedGroups:[...expandedGroups], selectedId:$('clusterMode').value==='isolated'?selectedId:null, positions:structuredClone(stored.layouts[activeViewKey]||{})};
+  return {name, filters:filters.map(f=>({...f})), settings:viewSettings(), expandedGroups:[...expandedGroups], selectedId:$('clusterMode').value==='isolated'?selectedId:null, neighborSelections:{include:[...currentNeighborChoices().include],exclude:[...currentNeighborChoices().exclude]}, positions:structuredClone(stored.layouts[activeViewKey]||{})};
 }
 function renderSavedViews(selected='') {
   const names=Object.keys(stored.namedViews).sort((a,b)=>a.localeCompare(b));
@@ -36,7 +91,10 @@ function renderSavedViews(selected='') {
 function restoreSnapshot(snapshot){
   capturePositions();
   filters=snapshot.filters.map(f=>({...f}));
+  // Saved views from v15 and earlier did not have selective neighbour settings.
+  $('neighborMode').value='all';
   VIEW_SETTING_IDS.forEach(id=>{if(!(id in snapshot.settings))return;const el=$(id); if(el.type==='checkbox')el.checked=Boolean(snapshot.settings[id]);else el.value=String(snapshot.settings[id]);});
+  neighborChoices.set(neighborScope(),{include:new Set(snapshot.neighborSelections?.include||[]),exclude:new Set(snapshot.neighborSelections?.exclude||[])});
   expandedGroups=new Set(snapshot.expandedGroups||[]);selectedId=snapshot.selectedId||null;selectedEdgeId=null;
   const key=viewKey();stored.layouts[key]=structuredClone(snapshot.positions);activeViewKey=null;
   renderChips();refresh();
@@ -233,7 +291,7 @@ function setData(h, c, r, resetFilters = false) {
   validate(h, c, r);
   capturePositions(); activeViewKey = null;
   hosts = h; communicationDefinitions = c; communications = expandCommunications(c); relationshipDefinitions = r; relationships = expandRelationships(r); expandedGroups.clear();
-  if (resetFilters) { filters = []; $('search').value = ''; }
+  if (resetFilters) { filters = []; neighborChoices.clear(); $('search').value = ''; }
   else filters = filters.filter(f => hosts.some(item => f.value===MISSING_FILTER || safeValues(item, f.key).includes(f.value)));
   rebuildSelectors(); renderChips(); buildGraph(); refresh();renderQuality();renderQuery();
   $('status').textContent = `${hosts.length.toLocaleString()} hosts loaded`;
@@ -400,6 +458,7 @@ function snapPosition(node) {
 
 function refresh() {
   if (!cy) return;
+  renderNeighborPicker();
   const nextKey=viewKey();
   const switchedView=activeViewKey!==nextKey;
   if(switchedView){capturePositions();activeViewKey=nextKey;}
@@ -411,7 +470,15 @@ function refresh() {
   const dir = $('direction').value;
   const adjacent = eligible.filter(c => (dir !== 'incoming' && matchedIds.has(c.source)) || (dir !== 'outgoing' && matchedIds.has(c.target)));
   visibleIds = new Set(matchedIds);
-  if ($('neighbours').checked) adjacent.forEach(c => {visibleIds.add(c.source);visibleIds.add(c.target);});
+  if ($('neighbours').checked) {
+    const choice=currentNeighborChoices(),mode=$('neighborMode').value;
+    adjacent.forEach(c=>{
+      for(const id of [c.source,c.target]){
+        if(matchedIds.has(id))continue;
+        if(mode==='all'||(mode==='only'&&choice.include.has(id))||(mode==='except'&&!choice.exclude.has(id)))visibleIds.add(id);
+      }
+    });
+  }
 
   // The communication graph determines visibility. Membership never adds nodes
   // during normal filtering: expanding only reveals membership lines between
@@ -684,6 +751,10 @@ function wire(){
   $('clearFilters').onclick=()=>{filters=[];renderChips();refresh();};
   ['neighbours','showAllVisibleEdges','portLabels','protocol','direction','clusterMode','autoGrouping','bundlePorts','bundleMemberships'].forEach(id=>$(id).addEventListener('change',refresh));
   $('search').addEventListener('input',findSearchMatches);
+  $('neighborSearch').addEventListener('input',renderNeighborPicker);
+  $('neighborMode').addEventListener('change',()=>{carryPositionsIntoNewView();refresh();});
+  $('neighborSelectAll').onclick=()=>{const choice=currentNeighborChoices(),set=$('neighborMode').value==='only'?choice.include:choice.exclude;neighborCandidates().forEach(h=>set.add(h.id));carryPositionsIntoNewView();refresh();};
+  $('neighborSelectNone').onclick=()=>{const choice=currentNeighborChoices(),set=$('neighborMode').value==='only'?choice.include:choice.exclude;set.clear();carryPositionsIntoNewView();refresh();};
   $('expandReset').onclick=()=>{expandedGroups.clear();selectedId=null;selectedEdgeId=null;refresh();};
   $('unselect').onclick=()=>{selectedId=null;selectedEdgeId=null;inspect();};
   $('fitBtn').onclick=()=>{if(cy.nodes(':visible').length)cy.fit(cy.elements(':visible'),55);};

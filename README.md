@@ -194,3 +194,10 @@ The **Configuration** tab edits Hosts, Communications and Memberships without ha
 Attribute values are entered as comma-separated lists. The `vlan` field converts numeric entries to numbers; other new fields are saved as arrays of strings. Communications support comma-separated source and target IDs, interpreted as all source–target combinations. Membership targets also support multiple IDs.
 
 Host IDs are immutable in the editor because they can be referenced by relationships and communications. To change one, make a new host and update its references first.
+
+
+## v16: Selectively include or omit connected hosts
+
+In **Topology → Relationships**, leave **Include directly connected hosts** enabled and choose **All connected hosts**, **Only selected hosts**, or **All except selected hosts**. For the latter two modes, use the searchable checkbox list to choose the relevant adjacent hosts. Service-matched elements are never removed by this setting. Only real communications involving visible endpoints remain in the diagram; no synthetic edges are added.
+
+Selections are scoped to the active attribute filter, protocol and dependency direction; changing services does not apply the previous service's host selections. Saved views now include their neighbour selection, and imported older views remain compatible. The original JSON data and local Configuration editor are unchanged.

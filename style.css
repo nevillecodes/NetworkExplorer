@@ -63,3 +63,6 @@
 .configButtons{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px}.danger{color:#9e3737;border-color:#e4b9b9}.configHeader .help{max-width:620px}
 .shell.configMode{grid-template-columns:minmax(0,1fr)}.shell.configMode .details{display:none}.shell.configMode .centre{min-width:0}
 @media(max-width:750px){.configWorkspace{grid-template-columns:1fr}.configList{height:180px;min-height:0}}
+
+/* v16 selective direct neighbour inclusion / omission */
+.neighborControls{padding:8px 0 4px}.neighborControls select{width:100%}.neighborControls .help{margin:8px 0}.neighborButtons{margin:9px 0}.neighborButtons button{font-size:11px;padding:7px 6px}.neighborList{max-height:265px;overflow:auto;border:1px solid #d9e4ee;border-radius:8px;background:#f8fbff}.neighborItem{display:flex;align-items:flex-start;gap:9px;border-bottom:1px solid #e9eef5;padding:8px 9px;cursor:pointer;font-size:12px}.neighborItem:last-child{border:0}.neighborItem:hover{background:#eef5ff}.neighborItem input{margin:3px 0 0;accent-color:#2463bd;flex:none}.neighborItem span{min-width:0;overflow-wrap:anywhere}.neighborItem strong{display:block;color:#263e5b}.neighborItem small{display:block;color:#6d7e91;margin-top:3px;font-size:10px}#neighborPicker[hidden],#neighborControls[hidden]{display:none}
